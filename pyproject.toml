@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "sae"
 version = "0.1.0"
-description = "This poetry setup was not working with `poetry install` on RunPod.io GPUs, so I just used `pip install -e .` in practice"
+description = "This poetry setup was not working with `poetry install` on RunPod.io GPUs, so I just used `pip install -e .` in practice."
 authors = ["Arthur Conmy"]
 readme = "README.md"
 
@@ -11,6 +11,11 @@ torch = "^2.1"
 ruff = "^0.1.3"
 einops = "^0.7.0"
 transformer-lens = "^1.7.0"
+
+# https://github.com/neelnanda-io/TransformerLens/issues/404
+tokenizers = "<=0.13.1" 
+transformers = "<=4.33.1"
+
 datasets = "^2.14.6"
 
 

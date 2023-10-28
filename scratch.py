@@ -11,7 +11,10 @@ if ipython is not None:
 
 from sae.model import SAE
 from typing import Union, Literal
+
 import torch
+torch.set_float32_matmul_precision('high') # When training if float32, torch.compile asked us to add this
+
 import transformer_lens
 from datasets import load_dataset
 from copy import deepcopy
@@ -23,7 +26,9 @@ lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 
 #%%
 
-D_SAE = lm.cfg.d_model
+D_SAE = 16384 # Neel's replication value
+# D_SAE = lm.cfg.d_model
+torch.random.manual_seed(42)
 dummy_sae = SAE(d_in=lm.cfg.d_mlp, d_sae=D_SAE) # For now, just keep same dimension
 
 #%%
@@ -32,12 +37,14 @@ dummy_sae = SAE(d_in=lm.cfg.d_mlp, d_sae=D_SAE) # For now, just keep same dimens
 
 #%%
 
-hf_dataset_name = "stas/c4-en-10k"
+# hf_dataset_name = "stas/c4-en-10k"
+hf_dataset_name = "NeelNanda/code-10k"
+
 c4_tenk = load_dataset(hf_dataset_name, split="train")
 
 # %%
 
-for i in range(10):
+for i in range(1000):
     s=c4_tenk[i]["text"]
     tokens=lm.to_tokens(s, truncate=False)
     print(i, tokens.shape)
@@ -54,7 +61,7 @@ BATCH_SIZE = 150
 batch_tokens = torch.LongTensor(size=(0, SEQ_LEN)).to(lm.cfg.device)
 current_batch = []
 current_length = 0
-CUTOFF: Union[Literal["just_batch", "all"], int] = BATCH_SIZE * 10
+CUTOFF: Union[Literal["just_batch", "all"], int] = "all" # BATCH_SIZE * 10
 
 print("Tokenizing...")
 for i in tqdm(range(10_000)):
@@ -104,8 +111,6 @@ if not CUTOFF_LAST:
         padded_last_batch = torch.nn.functional.pad(last_batch, (0, SEQ_LEN - current_length), value=lm.tokenizer.pad_token_id)
         batch_tokens = torch.cat((batch_tokens, padded_last_batch), dim=0)
 
-
-
 # batch_tokens is now a tensor where each slice along dim=0 has shape [1, SEQ_LEN]
 
 # %%
@@ -144,7 +149,7 @@ def train_step(
     # TODO actually apply the normalizing feature here
     # TODO ie remove the gradient jump in the direction of `old_wout`
 
-# comp_train_step = torch.compile(train_step)
+comp_train_step = torch.compile(train_step)
 # TODO make compilable!
 
 #%%
@@ -168,7 +173,7 @@ for step_num in tqdm(range(num_steps)):
     )[1][mlp_post_name]
 
     # mini_batch = data[step_num*BATCH_SIZE:(step_num+1)*BATCH_SIZE].to(lm.cfg.device)
-    saved_loss = train_step(sae, opt, mini_batch=mlp_post_acts)
+    saved_loss = comp_train_step(sae, opt, mini_batch=mlp_post_acts)
     print(step_num, saved_loss)
 
 # %%
