@@ -28,21 +28,23 @@ class SAE(HookedRootModule):
 
     def forward(self, x):
         sae_in = self.hook_sae_in(x)
+
         hidden_pre = self.hook_hidden_pre(
             einops.einsum(
                 sae_in,
                 self.W_in,
-                "batch d_in, d_in d_sae -> batch d_sae",
+                "batch seq d_in, d_in d_sae -> batch seq d_sae",
             )
             + self.b_in
         )
         hidden_post = self.hook_hidden_post(torch.nn.functional.relu(hidden_pre))
+
         sae_out = self.hook_sae_out(
             einops.einsum(
                 hidden_post,
                 self.W_out,
-                "batch d_sae -> batch d_in",
+                "batch seq d_sae, d_sae d_in -> batch seq d_in",
             )
             + self.b_out
         )
-        return sae_out
+        return sae_out, hidden_post
