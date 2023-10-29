@@ -338,15 +338,24 @@ with torch.no_grad():
 
                 if neuron_idx_ablated is None:
                     return activation
+
                 else:
                     ablated_activation = activation
-                    assert len(ablated_activation.shape)==3, ablated_activation.shape
-                    ablated_activation[:, :, neuron_idx_ablated] = 0 # Zero ablated
+
+                    if len(ablated_activation.shape)==2:
+                        ablated_activation[:, neuron_idx_ablated] = 0
+
+                    elif len(ablated_activation.shape)==3:    
+                        ablated_activation[:, :, neuron_idx_ablated] = 0 # Zero ablated
+
+                    else:
+                        raise ValueError(f"Unexpected shape {ablated_activation.shape}")
+
                     return ablated_activation
 
             logits = lm.run_with_hooks(
                 test_tokens,
-                fwd_hooks=[(cfg["act_name"], my_zero_hook)],
+                fwd_hooks=[(cfg["act_name"], lambda activation, hook: my_zero_hook(activation, hook)],
 
             )
             logprobs = torch.nn.functional.log_softmax(logits, dim=-1)

@@ -35,7 +35,7 @@ class SAE(HookedRootModule):
             einops.einsum(
                 sae_in,
                 self.W_in,
-                "batch d_in, d_in d_sae -> batch d_sae",
+                "... d_in, d_in d_sae -> ... d_sae",
             )
             + self.b_in
         )
@@ -45,7 +45,7 @@ class SAE(HookedRootModule):
             einops.einsum(
                 hidden_post,
                 self.W_out,
-                "batch d_sae, d_sae d_in -> batch d_in",
+                "... d_sae, d_sae d_in -> ... d_in",
             )
             + self.b_out
         )
