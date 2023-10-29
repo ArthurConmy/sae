@@ -7,7 +7,7 @@ from math import gcd
 
 used = set()
 
-def run_script(threshold, gpu_id, **kwargs):
+def run_script(threshold, gpu_id, kwargs): # Note fake kwargs
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     subprocess.run(["python", os.path.expanduser("~/sae/scratch.py")] + [f"--lr={kwargs['lr']}", f"--l1_lambda={kwargs['l1_lambda']}"], env=env)
