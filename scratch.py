@@ -18,6 +18,7 @@ torch.set_float32_matmul_precision('high') # When training if float32, torch.com
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
 from math import ceil
+from random import randint
 from sae.plotly_utils import hist, scatter
 from datasets import load_dataset
 from IPython.display import display, HTML
@@ -195,7 +196,7 @@ try:
 except Exception as e:
     print("Couldn't read file", __file__, "due to", str(e), "so not adding notes")
 
-run_name = ctime().replace(" ", "_").replace(":", "-")
+run_name = ctime().replace(" ", "_").replace(":", "-") + "_" + randint(1, 100)
 
 wandb.init(
     project="sae",
