@@ -321,7 +321,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                     test_loss = -correct_logprobs.mean()
                     metrics["test_loss_with_sae"] = test_loss.item()
 
-        if step_idx%cfg["reset_sae_neurons_every"]==0:
+        if cfg["reset_sae_neurons_every"](step_idx):
             # Save the state dict to weights/
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
