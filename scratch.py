@@ -6,8 +6,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "true"
 from IPython import get_ipython
 ipython = get_ipython()
 if ipython is not None:
-    ipython.magic("load_ext autoreload")
-    ipython.magic("autoreload 2")
+    ipython.run_line_magic("load_ext autoreload")
+    ipython.run_line_magic("autoreload 2")
 
 from sae.model import SAE
 # from sae.buffer import Buffer
@@ -17,6 +17,7 @@ torch.set_float32_matmul_precision('high') # When training if float32, torch.com
 
 import transformer_lens
 from math import ceil
+from sae.plotly_utils import hist, scatter
 from datasets import load_dataset
 from copy import deepcopy
 from tqdm.notebook import tqdm
@@ -59,19 +60,24 @@ _default_cfg = {
     "seq_len": 128,  # Length of each input sequence for the model
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
     "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-    "lr": 1e-4,  # This is because Neel uses L2, and I think we should use mean squared error
-    "l1_lambda": 3e-3, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+    "lr": 2e-4,  # This is because Neel uses L2, and I think we should use mean squared error
+    "l1_lambda": 4e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
     "dataset": "c4",  # Name of the dataset to use
     "dataset_args": ["en"],  # Any additional arguments for the dataset
-    "dataset_kwargs": {"split": "train", "streaming": True}, # Keyword arguments for dataset. Highly recommend streaming for massive datasets!
+    "dataset_kwargs": {"split": "train", "streaming": True}, 
+    # Keyword arguments for dataset. Highly recommend streaming for massive datasets!
     "beta1": 0.9,  # Adam beta1
     "beta2": 0.99,  # Adam beta2
     "buffer_size": 20_000,  # Size of the buffer
     "act_name": "blocks.0.mlp.hook_post",
-    "num_tokens": int(2e9),  # Number of tokens to train on 
+    "num_tokens": int(2e9), # Number of tokens to train on 
     "wandb_mode": "online", 
-    "test_set_size": 100, # 
+    "test_set_size": 128 * 20, # 20 Sequences
     "test_every": 100, #
+    "wandb_group": None,
+    "reset_sae_neurons_every": 250, # Neel uses 30_000 but we want to move fast
+    "reset_sae_neurons_cutoff": 1e-6,
+
 }
 
 # Copy with new args
@@ -106,7 +112,7 @@ raw_all_data = iter(load_dataset(cfg["dataset"], *(cfg["dataset_args"] or []), *
 
 # %%
 
-sae = deepcopy(dummy_sae).to(lm.cfg.device)
+sae = deepcopy(dummy_sae)
 opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
 
 #%%
@@ -119,7 +125,11 @@ def loss_fn(
 ):
     # Note L1 is summed, L2 is meaned here. Should be the most appropriate when comparing losses across different LM size
     reconstruction_loss = torch.pow((sae_reconstruction-ground_truth), 2).mean(dim=(0, 1)) 
-    l1_loss = l1_lambda * torch.abs(sae_reconstruction).sum(dim=1).mean(dim=(0,))
+    reconstruction_l1 = torch.abs(sae_reconstruction).sum(dim=1).mean(dim=(0,))
+    avg_num_firing = (sae_hiddens > 0).float().sum(dim=1).mean(dim=(0,)) # On a given token, how many neurons fired?
+    did_fire = (sae_hiddens > 0).long().sum(dim=0).cpu() # How many times did each neuron fire?
+
+    l1_loss = l1_lambda * reconstruction_l1
     loss = reconstruction_loss + l1_loss
     
     # if loss > 1e3:
@@ -130,6 +140,9 @@ def loss_fn(
         "loss_logged": loss.item(),
         "reconstruction_loss_logged": reconstruction_loss.item(),
         "l1_loss_logged": l1_loss.item(),
+        "reconstruction_l1_logged": reconstruction_l1.item(),
+        "avg_num_firing_logged": avg_num_firing.item(),
+        "did_fire_logged": did_fire,
     }
 
 def train_step(
@@ -162,19 +175,29 @@ def train_step(
 
 #%%
 
-# Offline wandb
+wandb_notes = ""
+
+try: 
+    with open(__file__, "r") as f:
+        wandb_notes += f.read()
+except Exception as e:
+    print("Couldn't read file", __file__, "due to", str(e), "so not adding notes")
+
 wandb.init(
     project="sae",
-    group="c410k",
+    group=cfg["wandb_group"],
     job_type="train",
     config=cfg,
     name=ctime().replace(" ", "_").replace(":", "-"),
     mode=cfg["wandb_mode"],
-)
+    notes=wandb_notes,
+)   
 
 #%%
 
 # current_all_data=deepcopy(raw_all_data) # So restarts actually restart
+
+running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
 
 for step_idx in range(
     ceil(cfg["num_tokens"] / (cfg["batch_size"])),
@@ -247,10 +270,16 @@ for step_idx in range(
             loss = -correct_logprobs.mean()
             wandb.log({"prelosses": loss.item()})
 
+        continue
+
     metrics = train_step(sae, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
+    running_frequency_counter += metrics["did_fire_logged"]
 
     if step_idx%cfg["test_every"]==0:
         # Also figure out the loss on the test prompts
+        # And figure out how frequently all the features fire
+        # And then actually resample those neurons
+
         with torch.no_grad():
             with torch.autocast("cuda", torch.bfloat16):
                 logits = lm.run_with_hooks(
@@ -261,6 +290,31 @@ for step_idx in range(
                 correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
                 test_loss = -correct_logprobs.mean()
                 metrics["test_loss_with_sae"] = test_loss.item()
+
+    if step_idx%cfg["reset_sae_neurons_every"]==0:
+        current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * cfg["test_every"])
+        fig = hist(
+            [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
+            # Show proportion on y axis
+            histnorm="probability",
+            title = "Histogram of SAE Neuron Firing Frequency (Proportions of all Neurons)",
+            xaxis_title = "Log10(Frequency)",
+            yaxis_title = "Proportion of Neurons",
+            return_fig = True,
+            # Do not show legend
+            showlegend = False,
+        )
+        metrics["frequency_histogram"] = fig
+    
+        # Reset
+        running_frequency_counter = torch.zeros_like(running_frequency_counter)
+
+        # Get indices of neurons with frequency < reset_cutoff
+        indices = (current_frequency_counter < cfg["reset_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
+        metrics["num_neurons_resampled"] = indices.numel()
+
+        if indices.numel() > 0:
+            sae.resample_neurons(indices)
 
     wandb.log(metrics)
 
@@ -279,7 +333,8 @@ with torch.no_grad():
         for neuron_idx_ablated in tqdm([None] + list(range(cfg["d_sae"])), desc="Neuron"):
             def my_zero_hook(activation, hook):
 
-                # activation = einops.rearrange(sae.run_with_hooks(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]) # TODO too tired, finish tomorrow, was going to look at whether any neurons are actually useful
+                # activation = einops.rearrange(sae.run_with_hooks(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]) 
+                # TODO too tired, finish tomorrow, was going to look at whether any neurons are actually useful
 
                 if neuron_idx_ablated is None:
                     return activation
@@ -291,7 +346,8 @@ with torch.no_grad():
 
             logits = lm.run_with_hooks(
                 test_tokens,
-                fwd_hooks=[(cfg["act_name"], my_zero_hook)], 
+                fwd_hooks=[(cfg["act_name"], my_zero_hook)],
+
             )
             logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
             correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
@@ -302,4 +358,6 @@ with torch.no_grad():
                 losses = torch.cat((losses, torch.FloatTensor([loss.item()]).to(lm.cfg.device)), dim=0)
                 if neuron_idx_ablated % 100 == 99:
                     print(losses.topk(10))
+
 # %%
+

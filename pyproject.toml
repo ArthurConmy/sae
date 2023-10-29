@@ -12,6 +12,7 @@ ruff = "^0.1.3"
 einops = "^0.7.0"
 transformer-lens = "^1.7.0"
 wandb = "^0.15.12"
+plotly = "^5.18.0"
 
 # https://github.com/neelnanda-io/TransformerLens/issues/404
 tokenizers = "<=0.13.1" 
