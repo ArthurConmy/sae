@@ -195,12 +195,14 @@ try:
 except Exception as e:
     print("Couldn't read file", __file__, "due to", str(e), "so not adding notes")
 
+run_name = ctime().replace(" ", "_").replace(":", "-")
+
 wandb.init(
     project="sae",
     group=cfg["wandb_group"],
     job_type="train",
     config=cfg,
-    name=ctime().replace(" ", "_").replace(":", "-"),
+    name=run_name,
     mode=cfg["wandb_mode"],
     notes=wandb_notes,
 )   
@@ -320,10 +322,10 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         if step_idx%cfg["reset_sae_neurons_every"]==0:
             # Save the state dict to weights/
-            fname = os.path.expanduser(f'~/sae/weights/{ctime().replace(" ", "_").replace(":", "_")}.pt')
+            fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
             # Log the last weights to wandb
-            wandb.save(fname)
+            wandb.save(fname) # TODO check whether this saves the whole history
 
             current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * cfg["test_every"])
             fig = hist(
