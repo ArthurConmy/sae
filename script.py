@@ -21,7 +21,7 @@ if __name__ == '__main__':
     jobs = []
 
     for it in range(3, int(1e6)):        
-        curspace = list(product([9e-5, 2e-4, 4e-4], [4e-4, 6e-4, 8e-4, 1e-3]))
+        curspace = list(product([9e-5, 2e-4, 4e-4], [1e-4, 2e-4, 4e-4, 5e-4]))
 
         if not isinstance(curspace, list):
             curspace = curspace[1:-1]
