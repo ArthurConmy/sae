@@ -85,6 +85,7 @@ _default_cfg = {
     "wandb_group": None,
     "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster
     "reset_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
+    "reset_sae_neurons_batches_covered": 100, # How many batches to cover before resampling
 }
 
 if ipython is None:
@@ -149,9 +150,6 @@ def loss_fn(
     l1_loss = l1_lambda * reconstruction_l1
     loss = reconstruction_loss + l1_loss
     
-    # if loss > 1e3:
-    #     assert False
-
     return {
         "loss": loss,
         "loss_logged": loss.item(),
@@ -337,18 +335,8 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         running_frequency_counter += metrics["did_fire_logged"]
 
         if step_idx%cfg["test_every"]==0:
-            # Also figure out the loss on the test prompts
-
-            with torch.no_grad():
-                with torch.autocast("cuda", torch.bfloat16):
-                    logits = lm.run_with_hooks(
-                        test_tokens,
-                        fwd_hooks=[(cfg["act_name"], lambda activation, hook: einops.rearrange(sae.forward(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]))],
-                    )
-                    logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-                    correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
-                    test_loss = -correct_logprobs.mean()
-                    metrics["test_loss_with_sae"] = test_loss.item()
+            # Figure out the loss on the test prompts
+            metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens).item()
 
         if cfg["save_state_dict_every"](step_idx):
             # First save the state dict to weights/
@@ -364,7 +352,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
             artifact.add_file(fname)
             wandb.log_artifact(artifact)
-            subprocess.run(["rm", "-rf", "/root/.cache/wandb/**"], shell=True)
+            subprocess.run("rm -rf /root/.cache/wandb/**", shell=True)
 
         if cfg["reset_sae_neurons_every"](step_idx):
             # And figure out how frequently all the features fire
@@ -394,8 +382,33 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             indices = (current_frequency_counter < cfg["reset_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
             metrics["num_neurons_resampled"] = indices.numel()
 
+            resample_sae_loss_increases = torch.FloatTensor(size=(0,)).float()
+            resample_mlp_post_acts = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu() # Hopefully ~800 million elements doesn't blow up CPU 
+
+            # Sample tons more data and save the directions here
+            for resample_batch_idx in range(cfg["reset_sae_neurons_batches_covered"]):
+                resample_batch_tokens = get_batch_tokens(
+                    lm=lm,
+                    dataset=raw_all_data,
+                )
+                sae_loss = sae.get_test_loss(lm=lm, test_tokens=resample_batch_tokens)
+
+                with torch.no_grad():
+                    # TODO fold this into the forward pass in get_test_loss, we don't need two forward passes
+                    with torch.autocast("cuda", torch.bfloat16):    
+                        model_logits, activation_cache = lm.run_with_cache(
+                            resample_batch_tokens,
+                            names_filter=cfg["act_name"],
+                        )
+                        mlp_post_acts = activation_cache[cfg["act_name"]].reshape(-1, cfg["d_in"])
+                        model_logprobs = torch.nn.functional.log_softmax(model_logits, dim=-1)
+                        model_loss = -model_logprobs[torch.arange(model_logprobs.shape[0])[:, None], torch.arange(model_logprobs.shape[1]-1)[None], resample_batch_tokens[:, 1:]].flatten()
+
+                        resample_sae_loss_increases = torch.cat((resample_sae_loss_increases, (sae_loss - model_loss).cpu()), dim=0)
+                        resample_mlp_post_acts = torch.cat((resample_mlp_post_acts, mlp_post_acts.cpu()), dim=0)
+
             if indices.numel() > 0:
-                sae.resample_neurons(indices, opt)
+                sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts)
 
         metrics["step_idx"] = step_idx
         wandb.log(metrics)
