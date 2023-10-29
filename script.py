@@ -32,7 +32,7 @@ if __name__ == '__main__':
             used.add(threshold)
 
             gpu_id = (threshold_idx // num_jobs_per_gpu) % num_gpus
-            jobs.append(pool.apply_async(run_script, (threshold, gpu_id, lr=threshold[0], l1_lambda=threshold[1])))
+            jobs.append(pool.apply_async(run_script, (threshold, gpu_id, {"lr": threshold[0], "l1_lambda": threshold[1]})))
 
         if isinstance(curspace, list):
             break
