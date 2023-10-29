@@ -17,10 +17,16 @@ class SAE(HookedRootModule):
         self.dtype = dtype
         self.device = device
 
+        # NOTE: ensure that we initialise the weights in the order 
         self.W_in = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(d_in, d_sae, dtype=dtype, device=device)))
         self.b_in = nn.Parameter(torch.zeros(d_sae, dtype=dtype, device=device))
         
         self.W_out = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(d_sae, d_in, dtype=dtype, device=device)))
+
+        with torch.no_grad():
+            # Anthropic normalize this to have unit columns
+            self.W_out /= torch.norm(self.W_out, dim=1, keepdim=True)
+
         self.b_out = nn.Parameter(torch.zeros(d_in, dtype=dtype, device=device))
 
         self.hook_sae_in = HookPoint()
@@ -31,7 +37,7 @@ class SAE(HookedRootModule):
         self.setup() # Required for `HookedRootModule`s
 
     def forward(self, x):
-        sae_in = self.hook_sae_in(x)
+        sae_in = self.hook_sae_in(x - self.b_out) # Remove encoder bias as per Anthropic
 
         hidden_pre = self.hook_hidden_pre(
             einops.einsum(
@@ -51,17 +57,24 @@ class SAE(HookedRootModule):
             )
             + self.b_out
         )
+
         return sae_out, hidden_post
 
     @torch.no_grad()
-    def resample_neurons(self, indices):
+    def resample_neurons(self, indices, opt):
+        """Do Anthropic-style resampling"""
+
         if len(indices.shape) != 1 and indices.shape[0] > 0:
             raise ValueError(f"indices must be a non-empty 1D tensor but was {indices.shape}")
         
         new_W_in = torch.nn.init.kaiming_uniform_(torch.empty(self.d_in, indices.shape[0], dtype=self.dtype, device=self.device))
-        new_W_out = torch.nn.init.kaiming_uniform_(torch.empty(indices.shape[0], self.d_in, dtype=self.dtype, device=self.device))
         new_b_in = torch.zeros(indices.shape[0], dtype=self.dtype, device=self.device)
+        new_W_out = torch.nn.init.kaiming_uniform_(torch.empty(indices.shape[0], self.d_in, dtype=self.dtype, device=self.device))
 
         self.W_in.data[:, indices] = new_W_in
-        self.W_out.data[indices, :] = new_W_out
         self.b_in.data[indices] = new_b_in
+        
+        self.W_out.data[indices, :] = new_W_out
+        self.W_out /= torch.norm(self.W_out, dim=1, keepdim=True)
+
+        # Reset all the Adam parameters

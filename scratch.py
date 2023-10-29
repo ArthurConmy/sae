@@ -17,10 +17,13 @@ torch.set_float32_matmul_precision('high') # When training if float32, torch.com
 
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
+
 from math import ceil
 from random import randint
 from sae.plotly_utils import hist, scatter
 from datasets import load_dataset
+import subprocess
+import time
 from IPython.display import display, HTML
 from copy import deepcopy
 import argparse
@@ -77,10 +80,11 @@ _default_cfg = {
     "num_tokens": int(2e12), # Number of tokens to train on 
     "wandb_mode": "online", 
     "test_set_size": 128 * 20, # 20 Sequences
-    "test_every": 100, #
+    "test_every": 100,
+    "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves imm 
     "wandb_group": None,
     "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster
-    "reset_sae_neurons_cutoff": 1e-5,
+    "reset_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
 }
 
 if ipython is None:
@@ -164,15 +168,40 @@ def train_step(
     test_data=None,
 ):
     opt.zero_grad(True)
-        
-    # TODO add feature, normalizing W_out columns (or rows??) to 1
-    # old_wout = model.W_out.clone().detach() 
-    # TODO then benchmark how much slower this is
+    # TODO benchmark whether grad adjustment is expensive here
     
     metrics = loss_fn(*sae(mini_batch), ground_truth=mini_batch, l1_lambda=cfg["l1_lambda"])
-
     metrics["loss"].backward()
+
+    # Update grads so that they remove the parallel component
+    # (d_sae, d_in) shape
+    with torch.no_grad():
+        parallel_component = einops.einsum(
+            sae.W_out.grad,
+            sae.W_out.data,
+            "d_sae d_in, d_sae d_in -> d_sae",
+        )
+        sae.W_out.grad -= einops.einsum(
+            parallel_component,
+            sae.W_out.data,
+            "d_sae, d_sae d_in -> d_sae d_in",
+        )
+
     opt.step()
+    opt.zero_grad()
+
+    # This isn't perfect as Adam has momentum-like components, so still renormalize to have unit norm 
+    with torch.no_grad():
+        # Renormalize W_out to have unit norm
+        norms = torch.norm(sae.W_out.data, dim=1, keepdim=True)
+        metrics = { # Mostly to sanity check that these aren't wildly different to 1!
+            **metrics,
+            "W_out_norms_mean": norms.mean().item(),
+            "W_out_norms_std": norms.std().item(),
+            "W_out_norms_min": norms.min().item(),
+            "W_out_norms_max": norms.max().item(),
+        }
+        sae.W_out.data /= (norms + 1e-6) # Eps for numerical stability I hope
 
     if test_data is not None:
         test_loss_metrics = loss_fn(*sae(test_data), ground_truth=test_data, l1_lambda=cfg["l1_lambda"])
@@ -270,7 +299,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         ceil(cfg["num_tokens"] / (cfg["batch_size"])),
     ):
         # We use Step 0 to make a "test set" 
-        # 
+
         # Firstly get the activations
         # Slowly construct the batch from the iterable dataset
         # TODO implement something like Neel's buffer that will be able to randomize activations much better
@@ -309,8 +338,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         if step_idx%cfg["test_every"]==0:
             # Also figure out the loss on the test prompts
-            # And figure out how frequently all the features fire
-            # And then actually resample those neurons
 
             with torch.no_grad():
                 with torch.autocast("cuda", torch.bfloat16):
@@ -323,8 +350,8 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                     test_loss = -correct_logprobs.mean()
                     metrics["test_loss_with_sae"] = test_loss.item()
 
-        if cfg["reset_sae_neurons_every"](step_idx):
-            # Save the state dict to weights/
+        if cfg["save_state_dict_every"](step_idx):
+            # First save the state dict to weights/
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
 
@@ -337,24 +364,30 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
             artifact.add_file(fname)
             wandb.log_artifact(artifact)
+            subprocess.run(["rm", "-rf", "/root/.cache/wandb/**"], shell=True)
 
+        if cfg["reset_sae_neurons_every"](step_idx):
+            # And figure out how frequently all the features fire
+            # And then actually resample those neurons
+
+            # Now compute dead neurons
             current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * (step_idx - last_test_every))
             last_test_every = step_idx
 
             fig = hist(
                 [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
                 # Show proportion on y axis
-                histnorm="probability",
+                histnorm="percent",
                 title = "Histogram of SAE Neuron Firing Frequency (Proportions of all Neurons)",
                 xaxis_title = "Log10(Frequency)",
-                yaxis_title = "Proportion of Neurons",
+                yaxis_title = "Percent (changed!) of Neurons",
                 return_fig = True,
                 # Do not show legend
                 showlegend = False,
             )
             metrics["frequency_histogram"] = fig
         
-            # Reset
+            # Reset the counter
             running_frequency_counter = torch.zeros_like(running_frequency_counter)
 
             # Get indices of neurons with frequency < reset_cutoff
@@ -362,7 +395,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             metrics["num_neurons_resampled"] = indices.numel()
 
             if indices.numel() > 0:
-                sae.resample_neurons(indices)            
+                sae.resample_neurons(indices, opt)
 
         metrics["step_idx"] = step_idx
         wandb.log(metrics)
@@ -378,7 +411,6 @@ wandb.finish()
 # %%
 
 # Test how important all the neurons are ...
-
 if ipython is not None:
     with torch.no_grad():
         with torch.autocast("cuda", torch.bfloat16):
@@ -386,10 +418,6 @@ if ipython is not None:
 
             for neuron_idx_ablated in tqdm([None] + list(range(cfg["d_sae"])), desc="Neuron"):
                 def ablation_hook(activation, hook, type: Literal["zero", "mean"] = "mean"):
-
-                    # activation = einops.rearrange(sae.run_with_hooks(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]) 
-                    # TODO too tired, finish tomorrow, was going to look at whether any neurons are actually useful
-
                     if neuron_idx_ablated is None:
                         return activation
 

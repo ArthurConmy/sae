@@ -16,14 +16,14 @@ def run_script(threshold, gpu_id, kwargs): # Note fake kwargs
 if __name__ == '__main__':
 
     num_gpus = 6 # specify the number of GPUs available
-    num_jobs_per_gpu = 3 # specify the number of jobs per GPU
+    num_jobs_per_gpu = 1 # specify the number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     jobs = []
 
     for it in range(3, int(1e6)):        
         # curspace = list(product([1e-4, 2e-4], (1e-4 * np.linspace(4, 5, 6)).tolist()))
-        curspace = list(range(12))
+        curspace = list(range(6)) # lol...
 
         if not isinstance(curspace, list):
             curspace = curspace[1:-1]
