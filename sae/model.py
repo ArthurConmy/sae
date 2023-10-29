@@ -28,6 +28,8 @@ class SAE(HookedRootModule):
         self.hook_hidden_post = HookPoint()
         self.hook_sae_out = HookPoint()
 
+        self.setup() # Required for `HookedRootModule`s
+
     def forward(self, x):
         sae_in = self.hook_sae_in(x)
 

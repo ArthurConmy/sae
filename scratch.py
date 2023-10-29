@@ -6,8 +6,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "true"
 from IPython import get_ipython
 ipython = get_ipython()
 if ipython is not None:
-    ipython.run_line_magic("load_ext autoreload")
-    ipython.run_line_magic("autoreload 2")
+    ipython.run_line_magic("load_ext", "autoreload")
+    ipython.run_line_magic("autoreload", "2")
 
 from sae.model import SAE
 # from sae.buffer import Buffer
@@ -16,10 +16,13 @@ import torch
 torch.set_float32_matmul_precision('high') # When training if float32, torch.compile asked us to add this
 
 import transformer_lens
+from circuitsvis.tokens import colored_tokens
 from math import ceil
 from sae.plotly_utils import hist, scatter
 from datasets import load_dataset
+from IPython.display import display, HTML
 from copy import deepcopy
+import argparse
 from tqdm.notebook import tqdm
 from time import ctime
 from dataclasses import dataclass
@@ -70,21 +73,30 @@ _default_cfg = {
     "beta2": 0.99,  # Adam beta2
     "buffer_size": 20_000,  # Size of the buffer
     "act_name": "blocks.0.mlp.hook_post",
-    "num_tokens": int(2e9), # Number of tokens to train on 
+    "num_tokens": int(2e12), # Number of tokens to train on 
     "wandb_mode": "online", 
     "test_set_size": 128 * 20, # 20 Sequences
     "test_every": 100, #
     "wandb_group": None,
-    "reset_sae_neurons_every": 250, # Neel uses 30_000 but we want to move fast
+    "reset_sae_neurons_every": 3_000, # Neel uses 30_000 but we want to move a bit faster
     "reset_sae_neurons_cutoff": 1e-6,
-
 }
 
-# Copy with new args
-cfg = {
-    **_default_cfg,
-    # "wandb_mode": "offline",  # Offline wandb
-}
+if ipython is None:
+    # Parse all arguments
+    parser = argparse.ArgumentParser()
+    for k, v in _default_cfg.items():
+        parser.add_argument(f"--{k}", type=type(v), default=v)
+    args = parser.parse_args()
+    cfg = {**_default_cfg}
+    for k, v in vars(args).items():
+        cfg[k] = v
+
+else:
+    cfg = {
+        **_default_cfg,
+        # "wandb_mode": "offline",  # Offline wandb
+    }
 
 assert cfg["batch_size"] % cfg["seq_len"] == 0, (cfg["batch_size"], cfg["seq_len"])
 
@@ -195,18 +207,11 @@ wandb.init(
 
 #%%
 
-# current_all_data=deepcopy(raw_all_data) # So restarts actually restart
-
-running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
-
-for step_idx in range(
-    ceil(cfg["num_tokens"] / (cfg["batch_size"])),
+def get_batch_tokens(
+    lm, 
+    dataset,
 ):
-    # We use Step 0 to make a "test set" 
-    # 
-    # Firstly get the activations
-    # Slowly construct the batch from the iterable dataset
-    # TODO implement something like Neel's buffer that will be able to randomize activations much better
+    """Warning: uses `cfg` globals and probably more. For profiling, mostly"""
 
     batch_tokens = torch.LongTensor(size=(0, cfg["seq_len"])).to(lm.cfg.device)
     current_batch = []
@@ -217,7 +222,7 @@ for step_idx in range(
         or
         (step_idx == 0 and cfg["test_set_size"] > batch_tokens.numel())
     ):
-        s = next(raw_all_data)["text"]
+        s = next(dataset)["text"]
         tokens = lm.to_tokens(s, truncate=False, move_to_device=True)
         token_len = tokens.shape[1]
 
@@ -248,125 +253,195 @@ for step_idx in range(
         # Ensure we didn't accidentally add too many tokens
         batch_tokens = batch_tokens[:cfg["batch_size"]//cfg["seq_len"]]
 
-    with torch.no_grad():
-        with torch.autocast("cuda", torch.bfloat16):    
-            mlp_post_acts = lm.run_with_cache(
-                batch_tokens,
-                names_filter=cfg["act_name"],
-            )[1][cfg["act_name"]].reshape(-1, cfg["d_in"])
+    return batch_tokens
 
-    if step_idx == 0:
-        test_tokens = batch_tokens
-        test_set = mlp_post_acts
+#%%
 
-        # Find the loss normally, and when zero ablating activation
-        for factor in [1.0, 0.0]:
-            logits = lm.run_with_hooks(
-                test_tokens,
-                fwd_hooks=[(cfg["act_name"], lambda activation, hook: factor*activation)],
-            )
-            logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-            correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
-            loss = -correct_logprobs.mean()
-            wandb.log({"prelosses": loss.item()})
+# def my_profiling():
+if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
+    running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
 
-        continue
+    for step_idx in range(
+        ceil(cfg["num_tokens"] / (cfg["batch_size"])),
+    ):
+        # We use Step 0 to make a "test set" 
+        # 
+        # Firstly get the activations
+        # Slowly construct the batch from the iterable dataset
+        # TODO implement something like Neel's buffer that will be able to randomize activations much better
 
-    metrics = train_step(sae, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
-    running_frequency_counter += metrics["did_fire_logged"]
-
-    if step_idx%cfg["test_every"]==0:
-        # Also figure out the loss on the test prompts
-        # And figure out how frequently all the features fire
-        # And then actually resample those neurons
+        batch_tokens = get_batch_tokens(
+            lm=lm,
+            dataset=raw_all_data,
+        )
 
         with torch.no_grad():
-            with torch.autocast("cuda", torch.bfloat16):
+            with torch.autocast("cuda", torch.bfloat16):    
+                mlp_post_acts = lm.run_with_cache(
+                    batch_tokens,
+                    names_filter=cfg["act_name"],
+                )[1][cfg["act_name"]].reshape(-1, cfg["d_in"])
+
+        if step_idx == 0:
+            test_tokens = batch_tokens
+            test_set = mlp_post_acts
+
+            # Find the loss normally, and when zero ablating activation
+            for factor in [1.0, 0.0]:
                 logits = lm.run_with_hooks(
                     test_tokens,
-                    fwd_hooks=[(cfg["act_name"], lambda activation, hook: einops.rearrange(sae.forward(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]))],
+                    fwd_hooks=[(cfg["act_name"], lambda activation, hook: factor*activation)],
                 )
                 logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
                 correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
-                test_loss = -correct_logprobs.mean()
-                metrics["test_loss_with_sae"] = test_loss.item()
+                loss = -correct_logprobs.mean()
+                wandb.log({"prelosses": loss.item()})
 
-    if step_idx%cfg["reset_sae_neurons_every"]==0:
-        current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * cfg["test_every"])
-        fig = hist(
-            [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
-            # Show proportion on y axis
-            histnorm="probability",
-            title = "Histogram of SAE Neuron Firing Frequency (Proportions of all Neurons)",
-            xaxis_title = "Log10(Frequency)",
-            yaxis_title = "Proportion of Neurons",
-            return_fig = True,
-            # Do not show legend
-            showlegend = False,
-        )
-        metrics["frequency_histogram"] = fig
-    
-        # Reset
-        running_frequency_counter = torch.zeros_like(running_frequency_counter)
+            continue
 
-        # Get indices of neurons with frequency < reset_cutoff
-        indices = (current_frequency_counter < cfg["reset_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
-        metrics["num_neurons_resampled"] = indices.numel()
+        metrics = train_step(sae, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
+        running_frequency_counter += metrics["did_fire_logged"]
 
-        if indices.numel() > 0:
-            sae.resample_neurons(indices)
+        if step_idx%cfg["test_every"]==0:
+            # Also figure out the loss on the test prompts
+            # And figure out how frequently all the features fire
+            # And then actually resample those neurons
 
-    wandb.log(metrics)
+            with torch.no_grad():
+                with torch.autocast("cuda", torch.bfloat16):
+                    logits = lm.run_with_hooks(
+                        test_tokens,
+                        fwd_hooks=[(cfg["act_name"], lambda activation, hook: einops.rearrange(sae.forward(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]))],
+                    )
+                    logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+                    correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
+                    test_loss = -correct_logprobs.mean()
+                    metrics["test_loss_with_sae"] = test_loss.item()
 
-    # TODO add some test feature
+        if step_idx%cfg["reset_sae_neurons_every"]==0:
+            # Save the state dict to weights/
+            fname = os.path.expanduser(f'~/sae/weights/{ctime().replace(" ", "_").replace(":", "_")}.pt')
+            torch.save(sae.state_dict(), fname)
+            # Log the last weights to wandb
+            wandb.save(fname)
 
+            current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * cfg["test_every"])
+            fig = hist(
+                [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
+                # Show proportion on y axis
+                histnorm="probability",
+                title = "Histogram of SAE Neuron Firing Frequency (Proportions of all Neurons)",
+                xaxis_title = "Log10(Frequency)",
+                yaxis_title = "Proportion of Neurons",
+                return_fig = True,
+                # Do not show legend
+                showlegend = False,
+            )
+            metrics["frequency_histogram"] = fig
+        
+            # Reset
+            running_frequency_counter = torch.zeros_like(running_frequency_counter)
+
+            # Get indices of neurons with frequency < reset_cutoff
+            indices = (current_frequency_counter < cfg["reset_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
+            metrics["num_neurons_resampled"] = indices.numel()
+
+            if indices.numel() > 0:
+                sae.resample_neurons(indices)            
+
+        wandb.log(metrics)
+
+#%%
+
+# Save the state dict to weights/
+torch.save(sae.state_dict(), os.path.expanduser("~/sae/weights/last_weights.pt"))
+# Log the last weights to wandb
+wandb.save(os.path.expanduser("~/sae/weights/last_weights.pt"))
 wandb.finish()
 
 # %%
 
 # Test how important all the neurons are ...
 
-with torch.no_grad():
-    with torch.autocast("cuda", torch.bfloat16):
-        losses = torch.FloatTensor(size=(0,)).to(lm.cfg.device)
+if ipython is not None:
+    with torch.no_grad():
+        with torch.autocast("cuda", torch.bfloat16):
+            losses = torch.FloatTensor(size=(0,)).to(lm.cfg.device)
 
-        for neuron_idx_ablated in tqdm([None] + list(range(cfg["d_sae"])), desc="Neuron"):
-            def my_zero_hook(activation, hook):
+            for neuron_idx_ablated in tqdm([None] + list(range(cfg["d_sae"])), desc="Neuron"):
+                def ablation_hook(activation, hook, type: Literal["zero", "mean"] = "mean"):
 
-                # activation = einops.rearrange(sae.run_with_hooks(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]) 
-                # TODO too tired, finish tomorrow, was going to look at whether any neurons are actually useful
+                    # activation = einops.rearrange(sae.run_with_hooks(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]) 
+                    # TODO too tired, finish tomorrow, was going to look at whether any neurons are actually useful
 
-                if neuron_idx_ablated is None:
-                    return activation
-
-                else:
-                    ablated_activation = activation
-
-                    if len(ablated_activation.shape)==2:
-                        ablated_activation[:, neuron_idx_ablated] = 0
-
-                    elif len(ablated_activation.shape)==3:    
-                        ablated_activation[:, :, neuron_idx_ablated] = 0 # Zero ablated
+                    if neuron_idx_ablated is None:
+                        return activation
 
                     else:
-                        raise ValueError(f"Unexpected shape {ablated_activation.shape}")
+                        ablated_activation = activation
 
-                    return ablated_activation
+                        if len(ablated_activation.shape)==2:
+                            ablated_activation[:, neuron_idx_ablated] -= (ablated_activation[:, neuron_idx_ablated].mean(dim=(0,), keepdim=True) if type=="mean" else ablated_activation[:, neuron_idx_ablated])
 
-            logits = lm.run_with_hooks(
-                test_tokens,
-                fwd_hooks=[(cfg["act_name"], lambda activation, hook: my_zero_hook(activation, hook)],
+                        elif len(ablated_activation.shape)==3:    
+                            ablated_activation[:, :, neuron_idx_ablated] -= (ablated_activation[:, :, neuron_idx_ablated].mean(dim=(0, 1), keepdim=True) if type=="mean" else ablated_activation[:, :, neuron_idx_ablated])
 
-            )
-            logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-            correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
-            loss = -correct_logprobs.mean()
-            if neuron_idx_ablated is None:
-                normal_loss = loss.item()
-            else:
-                losses = torch.cat((losses, torch.FloatTensor([loss.item()]).to(lm.cfg.device)), dim=0)
-                if neuron_idx_ablated % 100 == 99:
-                    print(losses.topk(10))
+                        else:
+                            raise ValueError(f"Unexpected shape {ablated_activation.shape}")
+
+                        return ablated_activation
+
+                logits = lm.run_with_hooks(
+                    test_tokens,
+                    fwd_hooks=[(cfg["act_name"], lambda activation, hook: sae.run_with_hooks(activation, fwd_hooks=[("hook_hidden_post", ablation_hook)])[0])],
+                )
+
+                logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+                correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
+                loss = -correct_logprobs.mean()
+                if neuron_idx_ablated is None:
+                    normal_loss = loss.item()
+                else:
+                    losses = torch.cat((losses, torch.FloatTensor([loss.item()]).to(lm.cfg.device)), dim=0)
+                    if neuron_idx_ablated % 100 == 99:
+                        print(losses.topk(10))
 
 # %%
 
+if ipython is not None:
+    # Now actually study the top neuron 
+    topk=4
+    top_neuron_idx = losses.topk(topk)[1][topk-1].item()
+
+    with torch.no_grad():
+        # Visualize where this damn thing fires
+
+        reshaped_test_acts = einops.rearrange(test_set, "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0])
+
+        pre_firing_amount = sae.run_with_cache( # TODO if this ever blows up GPU, make custom hook that just saves relevant neuron
+            reshaped_test_acts,
+            names_filter = "hook_hidden_pre",
+        )[1]["hook_hidden_pre"]
+        assert len(pre_firing_amount.shape) == 3, pre_firing_amount.shape
+        sae_neuron_firing = pre_firing_amount[:, :, top_neuron_idx]
+        
+        for seq_idx in range(10):
+            display(
+                    colored_tokens(
+                        lm.to_str_tokens(
+                            test_tokens[seq_idx],
+                        ),
+                        sae_neuron_firing[seq_idx],
+                    )
+            )
+        print(sae_neuron_firing.mean()) # >0 a lot???
+
+# %%
+
+if ipython is not None:
+    # Save the state dict to weights/
+    torch.save(sae.state_dict(), os.path.expanduser("~/sae/weights/last_weights.pt"))
+    # Log the last weights to wandb
+    wandb.save(os.path.expanduser("~/sae/weights/last_weights.pt"))
+
+# %%
