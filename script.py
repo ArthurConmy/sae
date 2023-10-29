@@ -10,7 +10,7 @@ used = set()
 def run_script(threshold, gpu_id, **kwargs):
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    subprocess.run(["python", os.path.expanduser("~/sae/scratch.py")] + [f"--lr={kwargs["lr"]}", f"--l1_lambda={kwargs["l1_lambda"]}"] env=env)
+    subprocess.run(["python", os.path.expanduser("~/sae/scratch.py")] + [f"--lr={kwargs['lr']}", f"--l1_lambda={kwargs['l1_lambda']}"], env=env)
 
 if __name__ == '__main__':
 
