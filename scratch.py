@@ -79,8 +79,8 @@ _default_cfg = {
     "test_set_size": 128 * 20, # 20 Sequences
     "test_every": 100, #
     "wandb_group": None,
-    "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step==500, # Neel uses 30_000 but we want to move a bit faster
-    "reset_sae_neurons_cutoff": 1e-6,
+    "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster
+    "reset_sae_neurons_cutoff": 1e-5,
 }
 
 if ipython is None:
