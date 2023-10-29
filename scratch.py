@@ -22,6 +22,7 @@ from copy import deepcopy
 from tqdm.notebook import tqdm
 from time import ctime
 from dataclasses import dataclass
+import einops
 import wandb
 
 #%%
@@ -59,7 +60,7 @@ _default_cfg = {
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
     "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
     "lr": 1e-4,  # This is because Neel uses L2, and I think we should use mean squared error
-    "l1_lambda": 3e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+    "l1_lambda": 3e-3, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
     "dataset": "c4",  # Name of the dataset to use
     "dataset_args": ["en"],  # Any additional arguments for the dataset
     "dataset_kwargs": {"split": "train", "streaming": True}, # Keyword arguments for dataset. Highly recommend streaming for massive datasets!
@@ -239,10 +240,11 @@ for step_idx in range(
         for factor in [1.0, 0.0]:
             logits = lm.run_with_hooks(
                 test_tokens,
-                fwd_hooks=[(cfg["act_name"], lambda activation: factor*activation)],
+                fwd_hooks=[(cfg["act_name"], lambda activation, hook: factor*activation)],
             )
             logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-            loss = -logprobs.mean()
+            correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
+            loss = -correct_logprobs.mean()
             wandb.log({"prelosses": loss.item()})
 
     metrics = train_step(sae, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
@@ -253,11 +255,12 @@ for step_idx in range(
             with torch.autocast("cuda", torch.bfloat16):
                 logits = lm.run_with_hooks(
                     test_tokens,
-                    fwd_hooks=[(cfg["act_name"], lambda activation: sae(activation))],
+                    fwd_hooks=[(cfg["act_name"], lambda activation, hook: einops.rearrange(sae.forward(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]))],
                 )
                 logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-                correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[: None], torch.arange(logprobs.shape[1]-1)[None], test_prompts[:, ]]
+                correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
                 test_loss = -correct_logprobs.mean()
+                metrics["test_loss_with_sae"] = test_loss.item()
 
     wandb.log(metrics)
 
@@ -267,3 +270,36 @@ wandb.finish()
 
 # %%
 
+# Test how important all the neurons are ...
+
+with torch.no_grad():
+    with torch.autocast("cuda", torch.bfloat16):
+        losses = torch.FloatTensor(size=(0,)).to(lm.cfg.device)
+
+        for neuron_idx_ablated in tqdm([None] + list(range(cfg["d_sae"])), desc="Neuron"):
+            def my_zero_hook(activation, hook):
+
+                # activation = einops.rearrange(sae.run_with_hooks(einops.rearrange(activation, "batch seq d_in -> (batch seq) d_in"))[0], "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0]) # TODO too tired, finish tomorrow, was going to look at whether any neurons are actually useful
+
+                if neuron_idx_ablated is None:
+                    return activation
+                else:
+                    ablated_activation = activation
+                    assert len(ablated_activation.shape)==3, ablated_activation.shape
+                    ablated_activation[:, :, neuron_idx_ablated] = 0 # Zero ablated
+                    return ablated_activation
+
+            logits = lm.run_with_hooks(
+                test_tokens,
+                fwd_hooks=[(cfg["act_name"], my_zero_hook)], 
+            )
+            logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+            correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
+            loss = -correct_logprobs.mean()
+            if neuron_idx_ablated is None:
+                normal_loss = loss.item()
+            else:
+                losses = torch.cat((losses, torch.FloatTensor([loss.item()]).to(lm.cfg.device)), dim=0)
+                if neuron_idx_ablated % 100 == 99:
+                    print(losses.topk(10))
+# %%
