@@ -196,7 +196,7 @@ try:
 except Exception as e:
     print("Couldn't read file", __file__, "due to", str(e), "so not adding notes")
 
-run_name = ctime().replace(" ", "_").replace(":", "-") + "_" + randint(1, 100)
+run_name = ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))
 
 wandb.init(
     project="sae",
