@@ -64,8 +64,8 @@ _default_cfg = {
     "seq_len": 128,  # Length of each input sequence for the model
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
     "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-    "lr": 2e-4,  # This is because Neel uses L2, and I think we should use mean squared error
-    "l1_lambda": 4e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+    "lr": 1e-4,  # This is because Neel uses L2, and I think we should use mean squared error
+    "l1_lambda": 3.8 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
     "dataset": "c4",  # Name of the dataset to use
     "dataset_args": ["en"],  # Any additional arguments for the dataset
     "dataset_kwargs": {"split": "train", "streaming": True}, 
@@ -260,6 +260,8 @@ def get_batch_tokens(
 
 #%%
 
+last_test_every = -1
+
 # def my_profiling():
 if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
@@ -325,10 +327,20 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # Save the state dict to weights/
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
-            # Log the last weights to wandb
-            wandb.save(fname) # TODO check whether this saves the whole history
 
-            current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * cfg["test_every"])
+            # Log the last weights to wandb
+            # Save as wandb artifact
+            artifact = wandb.Artifact(
+                name=f"weights_{run_name}",
+                type="weights",
+                description="Weights for SAE",
+            )
+            artifact.add_file(fname)
+            wandb.log_artifact(artifact)
+
+            current_frequency_counter = running_frequency_counter.float() / (cfg["batch_size"] * (step_idx - last_test_every))
+            last_test_every = step_idx
+
             fig = hist(
                 [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
                 # Show proportion on y axis
@@ -352,6 +364,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             if indices.numel() > 0:
                 sae.resample_neurons(indices)            
 
+        metrics["step_idx"] = step_idx
         wandb.log(metrics)
 
 #%%
