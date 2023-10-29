@@ -14,6 +14,7 @@ transformer-lens = "^1.7.0"
 wandb = "^0.15.12"
 plotly = "^5.18.0"
 circuitsvis = "^1.43.1"
+line_profiler = "^4.1.1"
 
 # https://github.com/neelnanda-io/TransformerLens/issues/404
 tokenizers = "<=0.13.1" 

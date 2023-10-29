@@ -1,12 +1,13 @@
 #%%
 
 import os 
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
+os.environ["TOKENIZERS_PARALLELISM"] = "true" # Ignores a warning, unsure if this option is right
 
 from IPython import get_ipython
 ipython = get_ipython()
 if ipython is not None:
     ipython.run_line_magic("load_ext", "autoreload")
+    ipython.run_line_magic("load_ext", "line_profiler")    
     ipython.run_line_magic("autoreload", "2")
 
 from sae.model import SAE
@@ -85,7 +86,9 @@ _default_cfg = {
     "wandb_group": None,
     "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster
     "reset_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
-    "reset_sae_neurons_batches_covered": 100, # How many batches to cover before resampling
+    "reset_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
+    "dtype": torch.float32, 
+    "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
 }
 
 if ipython is None:
@@ -109,7 +112,7 @@ assert cfg["batch_size"] % cfg["seq_len"] == 0, (cfg["batch_size"], cfg["seq_len
 # %%
 
 torch.random.manual_seed(cfg["seed"])
-dummy_sae = SAE(d_in=cfg["d_in"], d_sae=cfg["d_sae"]) # For now, just keep same dimension
+dummy_sae = SAE(cfg) # For now, just keep same dimension
 
 #%%
 
@@ -240,6 +243,7 @@ wandb.init(
 def get_batch_tokens(
     lm, 
     dataset,
+    step_idx,
 ):
     """Warning: uses `cfg` globals and probably more. For profiling, mostly"""
 
@@ -287,15 +291,14 @@ def get_batch_tokens(
 
 #%%
 
-last_test_every = -1
-
 # def my_profiling():
 if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
+    last_test_every = -1
 
-    for step_idx in range(
+    for step_idx in tqdm(range(
         ceil(cfg["num_tokens"] / (cfg["batch_size"])),
-    ):
+    )):
         # We use Step 0 to make a "test set" 
 
         # Firstly get the activations
@@ -305,6 +308,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         batch_tokens = get_batch_tokens(
             lm=lm,
             dataset=raw_all_data,
+            step_idx=step_idx,
         )
 
         with torch.no_grad():
@@ -342,6 +346,9 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # First save the state dict to weights/
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
+            
+            # Clear out, first?
+            subprocess.run("rm -rf /root/.cache/wandb/**", shell=True)
 
             # Log the last weights to wandb
             # Save as wandb artifact
@@ -352,7 +359,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
             artifact.add_file(fname)
             wandb.log_artifact(artifact)
-            subprocess.run("rm -rf /root/.cache/wandb/**", shell=True)
 
         if cfg["reset_sae_neurons_every"](step_idx):
             # And figure out how frequently all the features fire
@@ -386,10 +392,11 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             resample_mlp_post_acts = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu() # Hopefully ~800 million elements doesn't blow up CPU 
 
             # Sample tons more data and save the directions here
-            for resample_batch_idx in range(cfg["reset_sae_neurons_batches_covered"]):
+            for resample_batch_idx in tqdm(range(cfg["reset_sae_neurons_batches_covered"])):
                 resample_batch_tokens = get_batch_tokens(
                     lm=lm,
                     dataset=raw_all_data,
+                    step_idx=step_idx,
                 )
                 sae_loss = sae.get_test_loss(lm=lm, test_tokens=resample_batch_tokens)
 

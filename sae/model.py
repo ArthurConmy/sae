@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import einops
 from transformer_lens.hook_points import HookedRootModule, HookPoint
-from torch.distributions.multinomial import Multinomial
+from torch.distributions.multinomial import Categorical
 
 class SAE(HookedRootModule):
     def __init__(
@@ -76,7 +76,7 @@ class SAE(HookedRootModule):
     def resample_neurons(self, indices, opt, resample_sae_loss_increases, resample_mlp_post_acts):
         """Do Anthropic-style resampling"""
 
-        if len(indices.shape) != 1 and indices.shape[0] > 0:
+        if len(indices.shape) != 1 or indices.shape[0] == 0:
             raise ValueError(f"indices must be a non-empty 1D tensor but was {indices.shape}")
 
         if False:        
@@ -93,13 +93,30 @@ class SAE(HookedRootModule):
 
         # Sample len(indices) number of indices from resample_sae_loss_increases proportio
         unnormalized_probability_distribution = torch.nn.functional.relu(resample_sae_loss_increases)
-        probability_distribution = Multinomial(probs=unnormalized_probability_distribution / unnormalized_probability_distribution.sum())
+        probability_distribution = Categorical(probs=unnormalized_probability_distribution / unnormalized_probability_distribution.sum())
         
-        # Sample len(indices) number of indices without replacement
+        # Sample len(indices) number of indices
         samples = probability_distribution.sample((indices.shape[0],))
-        resampled_neuron_outs = torch.nonzero(samples, as_tuple=False).squeeze(1)
+        resampled_neuron_outs = resample_mlp_post_acts[samples]
 
-        # Update the weights
+        # Replace W_out with normalized versions of these
+        self.W_out.data[indices, :] = (resampled_neuron_outs / torch.norm(resampled_neuron_outs, dim=1, keepdim=True)).to(self.dtype).to(self.device)
+
+        # Set biases to zero
+        self.b_in.data[indices] = 0.0
+
+        # Set W_in equal to W_out.T in these indices, first
+        self.W_in.data[:, indices] = self.W_out.data[indices, :].T
+
+        # Then, change norms to be equal to 0.2 times the average norm of all the other columns, if other columns exist
+        if indices.shape[0] < self.d_sae:
+            sum_of_all_norms = torch.norm(self.W_in.data, dim=0).sum()
+            sum_of_all_norms -= len(indices)
+            average_norm = sum_of_all_norms / (self.d_sae - len(indices))
+            self.W_in.data[:, indices] *= 0.2 * average_norm
+
+        else:
+            self.W_in.data[:, indices] *= 0.2
 
         # Reset all the Adam parameters
         
