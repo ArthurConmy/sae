@@ -23,7 +23,7 @@ if __name__ == '__main__':
 
     for it in range(3, int(1e6)):        
         # curspace = list(product([1e-4, 2e-4], (1e-4 * np.linspace(4, 5, 6)).tolist()))
-        cursapce = list(range(12))
+        curspace = list(range(12))
 
         if not isinstance(curspace, list):
             curspace = curspace[1:-1]
