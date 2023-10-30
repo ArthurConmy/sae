@@ -473,8 +473,8 @@ if ipython is not None:
 # %%
 
 if ipython is not None:
-    # Now actually study the top neuron 
-    topk=4
+    # Now actually study the top neuron
+    topk=2
     top_neuron_idx = losses.topk(topk)[1][topk-1].item()
 
     with torch.no_grad():
@@ -498,6 +498,7 @@ if ipython is not None:
                         sae_neuron_firing[seq_idx],
                     )
             )
+        print("Neuron", top_neuron_idx, "fired", sae_neuron_firing.sum().item(), "times")
         print(sae_neuron_firing.mean()) # >0 a lot???
 
 # %%
@@ -508,4 +509,18 @@ if ipython is not None:
     # Log the last weights to wandb
     wandb.save(os.path.expanduser("~/sae/weights/last_weights.pt"))
 
+#%%
+
+# Load back artifact
+run_id = "4fl2qtec"
+run = wandb.Api().run(f"sae/{run_id}")
+# artifact = run.use_artifact(artifact_name)
+
 # %%
+
+l = list(run.logged_artifacts())
+latest_artifact = l[-2]
+latest_artifact.download(root=os.path.expanduser("~/sae/weights/wandb"))
+
+#%%
+
