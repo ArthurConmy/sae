@@ -82,7 +82,7 @@ _default_cfg = {
     "wandb_mode": "online", 
     "test_set_size": 128 * 20, # 20 Sequences
     "test_every": 100,
-    "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves imm 
+    "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
     "wandb_group": None,
     "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster
     "reset_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
@@ -392,7 +392,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             resample_mlp_post_acts = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu() # Hopefully ~800 million elements doesn't blow up CPU 
 
             # Sample tons more data and save the directions here
-            for resample_batch_idx in tqdm(range(cfg["reset_sae_neurons_batches_covered"])):
+            for resample_batch_idx in range(cfg["reset_sae_neurons_batches_covered"]):
                 resample_batch_tokens = get_batch_tokens(
                     lm=lm,
                     dataset=raw_all_data,
