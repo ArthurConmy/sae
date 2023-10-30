@@ -69,7 +69,7 @@ _default_cfg = {
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
     "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
     "lr": 1e-4,  # This is because Neel uses L2, and I think we should use mean squared error
-    "l1_lambda": 3.8 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+    "l1_lambda": 4.3 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
     "dataset": "c4",  # Name of the dataset to use
     "dataset_args": ["en"],  # Any additional arguments for the dataset
     "dataset_kwargs": {"split": "train", "streaming": True}, 
@@ -84,7 +84,7 @@ _default_cfg = {
     "test_every": 100,
     "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
     "wandb_group": None,
-    "reset_sae_neurons_every": lambda step: step%3_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster
+    "reset_sae_neurons_every": lambda step: step%10_000 == 0 or step in [100, 250, 500, 1000, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
     "reset_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
     "reset_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
     "dtype": torch.float32, 

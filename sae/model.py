@@ -79,7 +79,7 @@ class SAE(HookedRootModule):
         if len(indices.shape) != 1 or indices.shape[0] == 0:
             raise ValueError(f"indices must be a non-empty 1D tensor but was {indices.shape}")
 
-        if False:        
+        if False: # TODO reintegrate this resampling feature
             new_W_in = torch.nn.init.kaiming_uniform_(torch.empty(self.d_in, indices.shape[0], dtype=self.dtype, device=self.device))
             new_b_in = torch.zeros(indices.shape[0], dtype=self.dtype, device=self.device)
             new_W_out = torch.nn.init.kaiming_uniform_(torch.empty(indices.shape[0], self.d_in, dtype=self.dtype, device=self.device))
