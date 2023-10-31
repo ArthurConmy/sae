@@ -92,6 +92,7 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
     "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
     "buffer_size": 2**20, # Size of the buffer
+    "buffer_device": "cuda:0", # Size of the buffer
     "testing": True,
 }
 
@@ -162,11 +163,11 @@ opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg[
 
 start_time = time.time()
 
-# def my_profiling():
-if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
+def my_profiling():
+# if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
 
     if cfg["activation_training_order"] == "shuffled":
-        buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu()
+        buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().to(cfg["buffer_device"])
         # Hopefully ~800 million elements doesn't blow up CPU
 
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
@@ -214,10 +215,10 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         else:
             if buffer.shape[0] < cfg["buffer_size"] // 2:
-                if cfg["testing"] and buffer.shape[0] > 0:
-                    print(time.time()-start_time)
-                    raise Exception("We have finished iterating")
-                    # return
+                print(time.time()-start_time)
+                if cfg["testing"] and step_idx > 100:
+                    # raise Exception("We have finished iterating")
+                    return
 
                 # We need to refill the buffer
                 refill_iterator = range(0, batch_tokens.shape[0], cfg["batch_size"])
@@ -226,7 +227,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                     refill_iterator = tqdm(refill_iterator, desc="Refill")
 
                 # Initialize empty tensor buffer of the maximum required size
-                new_buffer = torch.zeros(total_size, *buffer.shape[1:], dtype=buffer.dtype).cpu()
+                new_buffer = torch.zeros(total_size, *buffer.shape[1:], dtype=buffer.dtype, device=cfg["buffer_device"])
 
                 # Fill existing buffer
                 new_buffer[:buffer.shape[0]] = buffer
@@ -235,15 +236,13 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 insert_idx = buffer.shape[0]
                 for refill_batch_idx_start in refill_iterator:
                     refill_batch_tokens = batch_tokens[refill_batch_idx_start:refill_batch_idx_start + cfg["batch_size"]]
-                    refill_mlp_post_acts = get_activations(
+                    new_buffer[insert_idx:insert_idx + refill_batch_tokens.numel()] = get_activations(
                         lm=lm,
                         cfg=cfg,
                         batch_tokens=refill_batch_tokens,
                         act_name=cfg["act_name"],
-                    ).cpu()
-
-                    new_buffer[insert_idx:insert_idx + refill_mlp_post_acts.shape[0]] = refill_mlp_post_acts
-                    insert_idx += refill_mlp_post_acts.shape[0]
+                    ).to(cfg["buffer_device"])
+                    insert_idx += refill_batch_tokens.numel()
 
                 # Truncate unused space in new_buffer
                 buffer = new_buffer[:insert_idx]
@@ -287,7 +286,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             torch.save(sae.state_dict(), fname)
             
             # Clear out, first?
-            subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True)
+            subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
 
             # Log the last weights to wandb
             # Save as wandb artifact
