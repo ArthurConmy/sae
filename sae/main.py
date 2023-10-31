@@ -173,7 +173,8 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
     last_test_every = -1
-
+    prelosses = []
+    
     step_iterator = range(
         ceil(cfg["num_tokens"] / sae_batch_size),
     )
@@ -272,6 +273,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
                 loss = -correct_logprobs.mean()
                 wandb.log({"prelosses": loss.item()})
+                prelosses.append(loss.item())
 
             continue
 
@@ -281,7 +283,8 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         if step_idx%cfg["test_every"]==0:
             # Figure out the loss on the test prompts
             metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens).item()
-
+            metrics["loss_recovered] = (prelosses[1]-metrics["test_loss_with_sae"])/(prelosses[1]-prelosses[0])
+        
         if cfg["save_state_dict_every"](step_idx):
             # First save the state dict to weights/
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
