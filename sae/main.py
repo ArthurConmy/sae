@@ -69,7 +69,7 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "seq_len": 128,  # Length of each input sequence for the model
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
     "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-    "lr": 1e-5,  # This is because Neel uses L2, and I think we should use mean squared error
+    "lr": 7 * 1e-5,  # This is because Neel uses L2, and I think we should use mean squared error
     "l1_lambda": 3.6 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
     "dataset": "c4",  # Name of the dataset to use
     "dataset_args": ["en"],  # Any additional arguments for the dataset
@@ -85,13 +85,13 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
     "wandb_group": None,
     "resample_mode": "reinit", # Either "reinit" or "Anthropic"
-    "resample_sae_neurons_every": lambda step: step%20_000 == 0 or step in [2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
+    "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
     "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
     "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
     "dtype": torch.float32, 
     "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
     "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-    "buffer_size": 2**20, # Size of the buffer
+    "buffer_size": 2**26, # Size of the buffer
     "buffer_device": "cuda:0", # Size of the buffer
     "testing": False,
 }
