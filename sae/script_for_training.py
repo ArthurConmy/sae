@@ -22,7 +22,7 @@ if __name__ == '__main__':
     jobs = []
 
     for it in range(3, int(1e6)):        
-        curspace = list(product([1e-4, 1.5 * 1e-4, 0.75 * 1e-4], (1e-4 * np.array([3.5, 4, 4.5])).tolist(), [1]))
+        curspace = list(product([0.7 * 1e-4, 0.75 * 1e-4, 0.8 * 1e-4], (1e-4 * np.array([3.5, 4, 4.5])).tolist(), [1]))
 
         if not isinstance(curspace, list):
             curspace = curspace[1:-1]
