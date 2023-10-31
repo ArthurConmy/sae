@@ -13,6 +13,7 @@ if ipython is not None:
 
 from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
 import torch
+assert torch.cuda.device_count() == 1, torch.cuda.device_count()
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
 from math import ceil
