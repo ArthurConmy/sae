@@ -76,7 +76,7 @@ def train_step(
     opt.step()
     opt.zero_grad()
 
-    # This isn't perfect as Adam has momentum-like components, so still renormalize to have unit norm 
+    # We move off the sphere! (Note also Adam has momentum-like components) So, we still renormalize to have unit norm 
     with torch.no_grad():
         # Renormalize W_out to have unit norm
         norms = torch.norm(sae.W_out.data, dim=1, keepdim=True)
