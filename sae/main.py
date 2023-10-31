@@ -69,8 +69,8 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "seq_len": 128,  # Length of each input sequence for the model
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
     "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-    "lr": 1e-4,  # This is because Neel uses L2, and I think we should use mean squared error
-    "l1_lambda": 3.9 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+    "lr": 1e-5,  # This is because Neel uses L2, and I think we should use mean squared error
+    "l1_lambda": 3.6 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
     "dataset": "c4",  # Name of the dataset to use
     "dataset_args": ["en"],  # Any additional arguments for the dataset
     "dataset_kwargs": {"split": "train", "streaming": True}, 
