@@ -16,7 +16,7 @@ class SAE(HookedRootModule):
         self.dtype = cfg["dtype"]
         self.device = cfg["device"]
 
-        # NOTE: ensure that we initialise the weights in the order W_in, b_in, W_out, b_out as editing Adam states requires this
+        # NOTE: if using resampling neurons method, you must ensure that we initialise the weights in the order W_in, b_in, W_out, b_out as editing Adam states requires this
         self.W_in = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(self.d_in, self.d_sae, dtype=self.dtype, device=self.device)))
         self.b_in = nn.Parameter(torch.zeros(self.d_sae, dtype=self.dtype, device=self.device))
         
@@ -73,13 +73,15 @@ class SAE(HookedRootModule):
         return test_loss
 
     @torch.no_grad()
-    def resample_neurons(self, indices, opt, resample_sae_loss_increases, resample_mlp_post_acts):
-        """Do Anthropic-style resampling"""
+    def resample_neurons(self, indices, opt, resample_sae_loss_increases, resample_mlp_post_acts, mode="anthropic"):
+        """Do Anthropic-style resampling.
+        
+        TODO document and implement better. This is really messy!!! :("""
 
         if len(indices.shape) != 1 or indices.shape[0] == 0:
             raise ValueError(f"indices must be a non-empty 1D tensor but was {indices.shape}")
 
-        if False: # TODO reintegrate this resampling feature
+        if mode=="reinit":
             new_W_in = torch.nn.init.kaiming_uniform_(torch.empty(self.d_in, indices.shape[0], dtype=self.dtype, device=self.device))
             new_b_in = torch.zeros(indices.shape[0], dtype=self.dtype, device=self.device)
             new_W_out = torch.nn.init.kaiming_uniform_(torch.empty(indices.shape[0], self.d_in, dtype=self.dtype, device=self.device))
@@ -89,35 +91,35 @@ class SAE(HookedRootModule):
             
             self.W_out.data[indices, :] = new_W_out
             self.W_out /= torch.norm(self.W_out, dim=1, keepdim=True)
-            return # Rip no Adam reset
-
-        # Sample len(indices) number of indices from resample_sae_loss_increases proportio
-        unnormalized_probability_distribution = torch.nn.functional.relu(resample_sae_loss_increases)
-        probability_distribution = Categorical(probs=unnormalized_probability_distribution / unnormalized_probability_distribution.sum())
-        
-        # Sample len(indices) number of indices
-        # TODO check we aren't samplign the same point several times, that sounds bad
-        samples = probability_distribution.sample((indices.shape[0],))
-        resampled_neuron_outs = resample_mlp_post_acts[samples]
-
-        # Replace W_out with normalized versions of these
-        self.W_out.data[indices, :] = (resampled_neuron_outs / torch.norm(resampled_neuron_outs, dim=1, keepdim=True)).to(self.dtype).to(self.device)
-
-        # Set biases to zero
-        self.b_in.data[indices] = 0.0
-
-        # Set W_in equal to W_out.T in these indices, first
-        self.W_in.data[:, indices] = self.W_out.data[indices, :].T
-
-        # Then, change norms to be equal to 0.2 times the average norm of all the other columns, if other columns exist
-        if indices.shape[0] < self.d_sae:
-            sum_of_all_norms = torch.norm(self.W_in.data, dim=0).sum()
-            sum_of_all_norms -= len(indices)
-            average_norm = sum_of_all_norms / (self.d_sae - len(indices))
-            self.W_in.data[:, indices] *= 0.2 * average_norm
 
         else:
-            self.W_in.data[:, indices] *= 0.2
+            # Sample len(indices) number of indices from resample_sae_loss_increases proportio
+            unnormalized_probability_distribution = torch.nn.functional.relu(resample_sae_loss_increases)
+            probability_distribution = Categorical(probs=unnormalized_probability_distribution / unnormalized_probability_distribution.sum())
+            
+            # Sample len(indices) number of indices
+            # TODO check we aren't sampling the same point several times, that sounds bad
+            samples = probability_distribution.sample((indices.shape[0],))
+            resampled_neuron_outs = resample_mlp_post_acts[samples]
+
+            # Replace W_out with normalized versions of these
+            self.W_out.data[indices, :] = (resampled_neuron_outs / torch.norm(resampled_neuron_outs, dim=1, keepdim=True)).to(self.dtype).to(self.device)
+
+            # Set biases to zero
+            self.b_in.data[indices] = 0.0
+
+            # Set W_in equal to W_out.T in these indices, first
+            self.W_in.data[:, indices] = self.W_out.data[indices, :].T
+
+            # Then, change norms to be equal to 0.2 times the average norm of all the other columns, if other columns exist
+            if indices.shape[0] < self.d_sae:
+                sum_of_all_norms = torch.norm(self.W_in.data, dim=0).sum()
+                sum_of_all_norms -= len(indices)
+                average_norm = sum_of_all_norms / (self.d_sae - len(indices))
+                self.W_in.data[:, indices] *= 0.2 * average_norm
+
+            else:
+                self.W_in.data[:, indices] *= 0.2
 
         # Reset all the Adam parameters
         for dict_idx, (k, v) in enumerate(opt.state.items()):
