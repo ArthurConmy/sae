@@ -202,7 +202,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                     dataset=raw_all_data,
                     seq_len=cfg["seq_len"],
                     batch_size=ceil((cfg["buffer_size"] - buffer.shape[0]) // cfg["seq_len"]),
-                    use_tqdm=cfg["testing"],
                     use_tqdm = cfg["buffer_size"] > 2**20,
                 )
 
