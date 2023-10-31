@@ -113,41 +113,46 @@ def get_batch_tokens(
     current_batch = []
     current_length = 0
 
+    pbar = tqdm(total=batch_size, desc="Filling batches")
+    
     while batch_tokens.shape[0] < batch_size:
         s = next(dataset)["text"]
         tokens = lm.to_tokens(s, truncate=False, move_to_device=True).squeeze(0)
         assert len(tokens.shape) == 1, f"tokens.shape should be 1D but was {tokens.shape}"
         token_len = tokens.shape[0]
-
+    
         while token_len > 0:
             # Space left in the current batch
             space_left = seq_len - current_length
-
+    
             # If the current tokens fit entirely into the remaining space
             if token_len <= space_left:
                 current_batch.append(tokens[:token_len])
                 current_length += token_len
                 break
-
+    
             else:
                 # Take as much as will fit
                 current_batch.append(tokens[:space_left])
-                
+    
                 # Remove used part, add BOS
                 tokens = tokens[space_left:]
                 tokens = torch.cat((torch.LongTensor([lm.tokenizer.bos_token_id]).to(tokens.device), tokens), dim=0)
-
-                token_len -= space_left 
+    
+                token_len -= space_left
                 token_len += 1
                 current_length = seq_len
-
+    
             # If a batch is full, concatenate and move to next batch
             if current_length == seq_len:
                 full_batch = torch.cat(current_batch, dim=0)
                 batch_tokens = torch.cat((batch_tokens, full_batch.unsqueeze(0)), dim=0)
                 current_batch = []
                 current_length = 0
-
+    
+        pbar.n = batch_tokens.shape[0]
+        pbar.refresh()
+    
     return batch_tokens
 
 @torch.autocast("cuda", torch.bfloat16)
