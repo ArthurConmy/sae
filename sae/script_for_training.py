@@ -33,4 +33,6 @@ if __name__ == '__main__':
         jobs.append(pool.apply_async(run_script, (threshold, gpu_id, {"lr": threshold[0], "l1_lambda": threshold[1], "seed": threshold[2]})))
     
     for job in jobs:
+        print(job, "\n")
         job.get()
+
