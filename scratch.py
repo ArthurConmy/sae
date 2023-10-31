@@ -1,7 +1,7 @@
 #%%
 
 import os 
-os.environ["TOKENIZERS_PARALLELISM"] = "true" # Ignores a warning, unsure if this option is right
+os.environ["TOKENIZERS_PARALLELISM"] = "false" # Ignores a warning, unsure if this option is right
 
 from IPython import get_ipython
 ipython = get_ipython()
@@ -12,7 +12,7 @@ if ipython is not None:
 
 from sae.model import SAE
 # from sae.buffer import Buffer
-from typing import Union, Literal, List, Dict, Tuple, Optional
+from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
 import torch
 torch.set_float32_matmul_precision('high') # When training if float32, torch.compile asked us to add this
 
@@ -21,6 +21,7 @@ from circuitsvis.tokens import colored_tokens
 
 from math import ceil
 from random import randint
+from jaxtyping import Float, Int, Bool
 from sae.plotly_utils import hist, scatter
 from datasets import load_dataset
 import subprocess
@@ -62,7 +63,7 @@ lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 # cfg["buffer_batches"] = cfg["buffer_size"] // cfg["seq_len"]
 # pprint.pprint(cfg)
 
-_default_cfg = {
+_default_cfg: Dict[str, Any] = { # TODO remove Any
     "seed": 42,  # RNG seed for reproducibility
     "batch_size": 4096,  # Number of samples in each mini-batch
     "seq_len": 128,  # Length of each input sequence for the model
@@ -89,6 +90,8 @@ _default_cfg = {
     "reset_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
     "dtype": torch.float32, 
     "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
+    "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
+    "buffer_size": 2**20, # Size of the buffer. Set to 
 }
 
 if ipython is None:
@@ -107,7 +110,11 @@ else:
         # "wandb_mode": "offline",  # Offline wandb
     }
 
-assert cfg["batch_size"] % cfg["seq_len"] == 0, (cfg["batch_size"], cfg["seq_len"])
+if cfg["batch_size"] % cfg["seq_len"] != 0:
+    raise ValueError(f'We are not using correct sizes; {cfg["batch_size"], cfg["seq_len"]}')
+
+if (cfg["activation_training_order"] == "ordered") != (cfg["buffer_size"] is not None):
+    raise ValueError(f'We train activations shuffled iff we have a buffer')
 
 # %%
 
@@ -116,25 +123,8 @@ dummy_sae = SAE(cfg) # For now, just keep same dimension
 
 #%%
 
-# Get some C4 (validation data?) and then see what it looks like
-
+# Get some C4 or other data from HF
 raw_all_data = iter(load_dataset(cfg["dataset"], *(cfg["dataset_args"] or []), **(cfg["dataset_kwargs"] or {})))
-# raw_iterable = [data_elem["text"] for data_elem in raw_all_data]
-
-# buffer = Buffer(
-#     cfg = cfg,
-#     iterable_dataset = raw_iterable,
-# )
-
-# for i in range(1000):
-#     s=raw_all_data[i]["text"]
-#     tokens=lm.to_tokens(s, truncate=False)
-#     print(i, tokens.shape)
-
-# %%
-
-sae = deepcopy(dummy_sae)
-opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
 
 #%%
 
@@ -165,6 +155,7 @@ def loss_fn(
 
 def train_step(
     sae, 
+    opt, 
     mini_batch,
     test_data=None,
 ):
@@ -240,25 +231,21 @@ wandb.init(
 
 #%%
 
+sae = deepcopy(dummy_sae) # Reinitialize `sae`
+opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
+
 def get_batch_tokens(
     lm, 
-    dataset,
-    step_idx = None,
-    big_size = None, # 1048576 # 2^20
+    dataset: Iterator[Dict], # Dict should contain "text": "This is my batch element..."
+    batch_size: int,
+    seq_len: int,
+    device: Optional[torch.device] = None, # Defaults to `lm.cfg.device`
 ):
-    """Warning: uses `cfg` globals and probably more. For profiling, mostly"""
-
-    batch_tokens = torch.LongTensor(size=(0, cfg["seq_len"])).to(lm.cfg.device if big_size is None else "cpu")
+    batch_tokens = torch.LongTensor(size=(0, cfg["seq_len"])).to(device or lm.cfg.device)
     current_batch = []
     current_length = 0
 
-    while (
-        (step_idx is not None and step_idx > 0 and batch_tokens.numel() < cfg["batch_size"]) 
-        or
-        (step_idx is not None and step_idx == 0 and cfg["test_set_size"] > batch_tokens.numel())
-        or
-        (step_idx is None and batch_tokens.numel() < big_size)
-    ):
+    while batch_tokens.shape[0] < batch_size:
         s = next(dataset)["text"]
         tokens = lm.to_tokens(s, truncate=False, move_to_device=True)
         token_len = tokens.shape[1]
@@ -294,6 +281,30 @@ def get_batch_tokens(
 
 #%%
 
+@torch.autocast("cuda", torch.bfloat16)
+@torch.no_grad()
+def get_activations(
+    lm,
+    batch_tokens, 
+    act_name,
+    reshape=True,    
+):
+    activations = lm.run_with_cache(
+        batch_tokens,
+        names_filter=act_name,
+    )[1][act_name]
+    
+    if reshape:
+        return activations.reshape(-1, cfg["d_in"])
+    else:
+        return activations
+
+#%%
+
+if cfg["activation_training_order"] == "shuffled":
+    buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu()
+    # Hopefully ~800 million elements doesn't blow up CPU
+
 # def my_profiling():
 if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
@@ -304,30 +315,52 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
     )):
         # We use Step 0 to make a "test set" 
 
-        # Firstly get the activations
-        # Slowly construct the batch from the iterable dataset
-        # TODO implement something like Neel's buffer that will be able to randomize activations much better
+        # First handle getting tokens
+        if cfg["activation_training_order"] == "ordered" or step_idx == 0:
+            batch_tokens = get_batch_tokens(
+                lm=lm,
+                dataset=raw_all_data,
+                seq_len=cfg["seq_len"],
+                batch_size=cfg["batch_size"] if step_idx > 0 else cfg["test_set_size"],
+            )
 
-        batch_tokens = get_batch_tokens(
-            lm=lm,
-            dataset=raw_all_data,
-            step_idx=step_idx,
-        )
+        else:
+            assert cfg["activation_training_order"] == "shuffled", cfg["activation_training_order"]
 
-        with torch.no_grad():
+            if buffer.shape[0] < cfg["max_buffer_size"] // 2:
+                # If we have less than half the buffer size, 
+                # Generate enough new tokens to fill the buffer
+                batch_tokens = get_batch_tokens(
+                    lm=lm,
+                    dataset=raw_all_data,
+                    seq_len=cfg["seq_len"],
+                    batch_size=ceil((cfg["max_buffer_size"] - mlp_post_acts.shape[0]) // cfg["seq_len"]),
+                )
+
+        # Then handle getting activations (possibly moving to correct device)
+
+        if cfg["activation_training_order"] == "ordered" or step_idx == 0:
+            mlp_post_acts = get_activations(
+                lm=lm,
+                batch_tokens=batch_tokens,
+                act_name=cfg["act_name"],
+            )
+
+        else:
+            if mlp_post_acts.shape[0] < cfg["max_buffer_size"] // 2:
+                # We need to refill the buffer
+                for refill_batch_idx_start in range(
+                    0, batch_tokens.shape[0], cfg["batch_size"]
+                ):
+                    refill_batch_tokens = batch_tokens[refill_batch_idx_start:refill_batch_idx_start+cfg["batch_size"]]
+                    refill_mlp_post_acts = get_activations(
+                        lm=lm,
+                        batch_tokens=refill_batch_tokens,
+                        act_name=cfg["act_name"],
+                    ).cpu()
+                    mlp_post_acts = torch.cat((mlp_post_acts, refill_mlp_post_acts.cpu()), dim=0)
 
 
-
-            # TODO TODO TODO add here something for the `big_size` stuff.
-            # Seems super important to make this waaaaaay more modular
-
-
-
-            with torch.autocast("cuda", torch.bfloat16):    
-                mlp_post_acts = lm.run_with_cache(
-                    batch_tokens,
-                    names_filter=cfg["act_name"],
-                )[1][cfg["act_name"]].reshape(-1, cfg["d_in"])
 
         if step_idx == 0:
             test_tokens = batch_tokens
@@ -346,7 +379,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             continue
 
-        metrics = train_step(sae, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
+        metrics = train_step(sae=sae, opt=opt, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
         running_frequency_counter += metrics["did_fire_logged"]
 
         if step_idx%cfg["test_every"]==0:
