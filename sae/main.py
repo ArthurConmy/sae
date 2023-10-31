@@ -92,7 +92,7 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "dtype": torch.float32, 
     "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
     "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-    "buffer_size": 2**26, # Size of the buffer
+    "buffer_size": 2**24, # Size of the buffer
     "buffer_device": "cuda:0", # Size of the buffer
     "testing": False,
 }
