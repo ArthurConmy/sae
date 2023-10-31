@@ -22,7 +22,7 @@ if __name__ == '__main__':
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     jobs = []
 
-    curspace = list(product([0.7 * 1e-4, 0.75 * 1e-4, 0.8 * 1e-4], [3.75 * 1e-4, 4 * 1e-4], [1]))[:1]
+    curspace = list(product([0.7 * 1e-4, 0.75 * 1e-4, 0.8 * 1e-4], [3.6 * 1e-4, 3.8 * 1e-4], [1]))
     
     for threshold_idx, threshold in enumerate(curspace):
         if threshold in used:
