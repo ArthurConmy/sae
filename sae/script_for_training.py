@@ -15,7 +15,7 @@ def run_script(threshold, gpu_id, kwargs): # Note fake kwargs
 
 if __name__ == '__main__':
 
-    num_gpus = 8 # specify the number of GPUs available
+    num_gpus = 6 # specify the number of GPUs available
     num_jobs_per_gpu = 1 # specify the number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
