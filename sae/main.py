@@ -93,7 +93,7 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
     "buffer_size": 2**20, # Size of the buffer
     "buffer_device": "cuda:0", # Size of the buffer
-    "testing": True,
+    "testing": False,
 }
 
 if ipython is None:
@@ -163,8 +163,8 @@ opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg[
 
 start_time = time.time()
 
-def my_profiling():
-# if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
+# def my_profiling():
+if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
 
     if cfg["activation_training_order"] == "shuffled":
         buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().to(cfg["buffer_device"])
@@ -217,8 +217,8 @@ def my_profiling():
             if buffer.shape[0] < cfg["buffer_size"] // 2:
                 print(time.time()-start_time)
                 if cfg["testing"] and step_idx > 100:
-                    # raise Exception("We have finished iterating")
-                    return
+                    raise Exception("We have finished iterating")
+                    # return
 
                 # We need to refill the buffer
                 refill_iterator = range(0, batch_tokens.shape[0], cfg["batch_size"])
@@ -254,7 +254,8 @@ def my_profiling():
             mlp_post_acts = buffer[-sae_batch_size:].to(cfg["device"])
             buffer = buffer[:-sae_batch_size]
 
-            print("After: ", buffer.shape, mlp_post_acts.shape)
+            if cfg["testing"]:
+                print("After: ", buffer.shape, mlp_post_acts.shape)
 
         if step_idx == 0:
             test_tokens = batch_tokens
