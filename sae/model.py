@@ -57,7 +57,7 @@ class SAE(HookedRootModule):
             + self.b_out
         )
 
-        return sae_out, hidden_post
+        return sae_out, hidden_post # TODO setup return_mode: "sae_out", "hidden_post", "both"
 
     @torch.no_grad()
     def get_test_loss(self, lm, test_tokens):
