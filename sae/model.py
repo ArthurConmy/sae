@@ -142,6 +142,7 @@ class SAE(HookedRootModule):
         for dict_idx, (k, v) in enumerate(opt.state.items()):
             for v_key in ["exp_avg", "exp_avg_sq"]:
                 if dict_idx == 0:
-                    assert k.data.shape == (self.d_in, self.d_sae)
-                        if (v[v_key][:, indices]).abs().max().item() > 1e-6:
-                            print("Warning: it does not seem as if resetting the Adam parameters worked")
+                    if k.data.shape != (self.d_in, self.d_sae):
+                        print("Warning: it does not seem as if resetting the Adam parameters worked, there are shapes mismatches")
+                    if v[v_key][:, indices].abs().max().item() > 1e-6:
+                        print("Warning: it does not seem as if resetting the Adam parameters worked")

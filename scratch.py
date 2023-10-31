@@ -85,13 +85,14 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "test_every": 100,
     "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
     "wandb_group": None,
-    "reset_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
-    "reset_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
-    "reset_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
+    "resample_mode": "reinit", # Either "reinit" or "Anthropic"
+    "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
+    "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
+    "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
     "dtype": torch.float32, 
     "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
     "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-    "buffer_size": 2**20, # Size of the buffer. Set to 
+    "buffer_size": 2**20, # Size of the buffer
 }
 
 if ipython is None:
@@ -113,7 +114,7 @@ else:
 if cfg["batch_size"] % cfg["seq_len"] != 0:
     raise ValueError(f'We are not using correct sizes; {cfg["batch_size"], cfg["seq_len"]}')
 
-if (cfg["activation_training_order"] == "ordered") != (cfg["buffer_size"] is not None):
+if (cfg["activation_training_order"] == "ordered") != (cfg["buffer_size"] is None):
     raise ValueError(f'We train activations shuffled iff we have a buffer')
 
 # %%
@@ -327,14 +328,14 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         else:
             assert cfg["activation_training_order"] == "shuffled", cfg["activation_training_order"]
 
-            if buffer.shape[0] < cfg["max_buffer_size"] // 2:
+            if buffer.shape[0] < cfg["buffer_size"] // 2:
                 # If we have less than half the buffer size, 
                 # Generate enough new tokens to fill the buffer
                 batch_tokens = get_batch_tokens(
                     lm=lm,
                     dataset=raw_all_data,
                     seq_len=cfg["seq_len"],
-                    batch_size=ceil((cfg["max_buffer_size"] - mlp_post_acts.shape[0]) // cfg["seq_len"]),
+                    batch_size=ceil((cfg["buffer_size"] - mlp_post_acts.shape[0]) // cfg["seq_len"]),
                 )
 
         # Then handle getting activations (possibly moving to correct device)
@@ -347,7 +348,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
 
         else:
-            if mlp_post_acts.shape[0] < cfg["max_buffer_size"] // 2:
+            if mlp_post_acts.shape[0] < cfg["buffer_size"] // 2:
                 # We need to refill the buffer
                 for refill_batch_idx_start in range(
                     0, batch_tokens.shape[0], cfg["batch_size"]
@@ -358,9 +359,14 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                         batch_tokens=refill_batch_tokens,
                         act_name=cfg["act_name"],
                     ).cpu()
-                    mlp_post_acts = torch.cat((mlp_post_acts, refill_mlp_post_acts.cpu()), dim=0)
+                    buffer = torch.cat((buffer, refill_mlp_post_acts.cpu()), dim=0)
+                
+                # Shuffle buffer
+                buffer = buffer[torch.randperm(buffer.shape[0])]
 
-
+            # Pop off the end of the buffer
+            mlp_post_acts = buffer[-cfg["batch_size"]:].to(cfg["device"])
+            buffer = buffer[:-cfg["batch_size"]]
 
         if step_idx == 0:
             test_tokens = batch_tokens
@@ -404,7 +410,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             artifact.add_file(fname)
             wandb.log_artifact(artifact)
 
-        if cfg["reset_sae_neurons_every"](step_idx):
+        if cfg["resample_sae_neurons_every"](step_idx):
             # And figure out how frequently all the features fire
             # And then actually resample those neurons
 
@@ -429,37 +435,42 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             running_frequency_counter = torch.zeros_like(running_frequency_counter)
 
             # Get indices of neurons with frequency < reset_cutoff
-            indices = (current_frequency_counter < cfg["reset_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
+            indices = (current_frequency_counter < cfg["resample_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
             metrics["num_neurons_resampled"] = indices.numel()
 
             resample_sae_loss_increases = torch.FloatTensor(size=(0,)).float()
             resample_mlp_post_acts = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu() # Hopefully ~800 million elements doesn't blow up CPU 
 
             # Sample tons more data and save the directions here
-            for resample_batch_idx in range(cfg["reset_sae_neurons_batches_covered"]):
-                resample_batch_tokens = get_batch_tokens(
-                    lm=lm,
-                    dataset=raw_all_data,
-                    step_idx=step_idx,
-                )
-                sae_loss = sae.get_test_loss(lm=lm, test_tokens=resample_batch_tokens)
 
-                with torch.no_grad():
-                    # TODO fold this into the forward pass in get_test_loss, we don't need two forward passes
-                    with torch.autocast("cuda", torch.bfloat16):    
-                        model_logits, activation_cache = lm.run_with_cache(
-                            resample_batch_tokens,
-                            names_filter=cfg["act_name"],
-                        )
-                        mlp_post_acts = activation_cache[cfg["act_name"]].reshape(-1, cfg["d_in"])
-                        model_logprobs = torch.nn.functional.log_softmax(model_logits, dim=-1)
-                        model_loss = -model_logprobs[torch.arange(model_logprobs.shape[0])[:, None], torch.arange(model_logprobs.shape[1]-1)[None], resample_batch_tokens[:, 1:]].flatten()
+            if cfg["resample_mode"] == "anthropic":
+                # TODO this is a bit of a mess
+                for resample_batch_idx in range(cfg["resample_sae_neurons_batches_covered"]):
+                    resample_batch_tokens = get_batch_tokens(
+                        lm=lm,
+                        dataset=raw_all_data,
+                        seq_len=cfg["seq_len"],
+                        batch_size=cfg["batch_size"],
+                    )
+                    sae_loss = sae.get_test_loss(lm=lm, test_tokens=resample_batch_tokens)
 
-                        resample_sae_loss_increases = torch.cat((resample_sae_loss_increases, (sae_loss - model_loss).cpu()), dim=0)
-                        resample_mlp_post_acts = torch.cat((resample_mlp_post_acts, mlp_post_acts.cpu()), dim=0)
+                    with torch.no_grad():
+                        # TODO fold this into the forward pass in get_test_loss, we don't need two forward passes
+                        with torch.autocast("cuda", torch.bfloat16):    
+                            model_logits, activation_cache = lm.run_with_cache(
+                                resample_batch_tokens,
+                                names_filter=cfg["act_name"],
+                            )
+                            mlp_post_acts = activation_cache[cfg["act_name"]].reshape(-1, cfg["d_in"])
+                            model_logprobs = torch.nn.functional.log_softmax(model_logits, dim=-1)
+                            model_loss = -model_logprobs[torch.arange(model_logprobs.shape[0])[:, None], torch.arange(model_logprobs.shape[1]-1)[None], resample_batch_tokens[:, 1:]].flatten()
+
+                            resample_sae_loss_increases = torch.cat((resample_sae_loss_increases, (sae_loss - model_loss).cpu()), dim=0)
+                            resample_mlp_post_acts = torch.cat((resample_mlp_post_acts, mlp_post_acts.cpu()), dim=0)
 
             if indices.numel() > 0:
-                sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts)
+                # If there are any neurons we should resample, do this
+                sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts, mode=cfg["resample_mode"])
 
         metrics["step_idx"] = step_idx
         wandb.log(metrics)
