@@ -85,7 +85,7 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
     "wandb_group": None,
     "resample_mode": "reinit", # Either "reinit" or "Anthropic"
-    "resample_sae_neurons_every": lambda step: step%40_000 == 0 or step in [2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
+    "resample_sae_neurons_every": lambda step: step%30_000 == 0 or step in [2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
     "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
     "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
     "dtype": torch.float32, 
