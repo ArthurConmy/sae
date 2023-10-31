@@ -9,7 +9,7 @@ used = set()
 def run_script(threshold, gpu_id, kwargs):
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    args = ["python", os.path.expanduser("~/sae/sae/script_for_training.py")]
+    args = ["python", os.path.expanduser("~/sae/sae/main.py")]
     args.extend([f"--lr={kwargs['lr']}", f"--l1_lambda={kwargs['l1_lambda']}", f"--seed={kwargs['seed']}"])
     subprocess.run(args, env=env)
 
