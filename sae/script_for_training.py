@@ -21,19 +21,15 @@ if __name__ == '__main__':
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     jobs = []
 
-    for it in range(3, int(1e6)):
-        curspace = list(product([0.7 * 1e-4, 0.75 * 1e-4, 0.8 * 1e-4], [3.75 * 1e-4, 4 * 1e-4], [1]))[:1]
-        
-        for threshold_idx, threshold in enumerate(curspace):
-            if threshold in used:
-                continue
-            used.add(threshold)
+    curspace = list(product([0.7 * 1e-4, 0.75 * 1e-4, 0.8 * 1e-4], [3.75 * 1e-4, 4 * 1e-4], [1]))[:1]
+    
+    for threshold_idx, threshold in enumerate(curspace):
+        if threshold in used:
+            continue
+        used.add(threshold)
 
-            gpu_id = (threshold_idx // num_jobs_per_gpu) % num_gpus
-            jobs.append(pool.apply_async(run_script, (threshold, gpu_id, {"lr": threshold[0], "l1_lambda": threshold[1], "seed": threshold[2]})))
-        
-        if curspace:
-            break
-
+        gpu_id = (threshold_idx // num_jobs_per_gpu) % num_gpus
+        jobs.append(pool.apply_async(run_script, (threshold, gpu_id, {"lr": threshold[0], "l1_lambda": threshold[1], "seed": threshold[2]})))
+    
     for job in jobs:
         job.get()
