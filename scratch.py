@@ -243,18 +243,21 @@ wandb.init(
 def get_batch_tokens(
     lm, 
     dataset,
-    step_idx,
+    step_idx = None,
+    big_size = None, # 1048576 # 2^20
 ):
     """Warning: uses `cfg` globals and probably more. For profiling, mostly"""
 
-    batch_tokens = torch.LongTensor(size=(0, cfg["seq_len"])).to(lm.cfg.device)
+    batch_tokens = torch.LongTensor(size=(0, cfg["seq_len"])).to(lm.cfg.device if big_size is None else "cpu")
     current_batch = []
     current_length = 0
 
     while (
-        (step_idx > 0 and batch_tokens.numel() < cfg["batch_size"]) 
+        (step_idx is not None and step_idx > 0 and batch_tokens.numel() < cfg["batch_size"]) 
         or
-        (step_idx == 0 and cfg["test_set_size"] > batch_tokens.numel())
+        (step_idx is not None and step_idx == 0 and cfg["test_set_size"] > batch_tokens.numel())
+        or
+        (step_idx is None and batch_tokens.numel() < big_size)
     ):
         s = next(dataset)["text"]
         tokens = lm.to_tokens(s, truncate=False, move_to_device=True)
@@ -312,6 +315,14 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         )
 
         with torch.no_grad():
+
+
+
+            # TODO TODO TODO add here something for the `big_size` stuff.
+            # Seems super important to make this waaaaaay more modular
+
+
+
             with torch.autocast("cuda", torch.bfloat16):    
                 mlp_post_acts = lm.run_with_cache(
                     batch_tokens,
