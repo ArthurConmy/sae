@@ -96,7 +96,7 @@ class SAE(HookedRootModule):
         probability_distribution = Categorical(probs=unnormalized_probability_distribution / unnormalized_probability_distribution.sum())
         
         # Sample len(indices) number of indices
-        # TODO check we aren't samplign the same point several times, that soudsn bad
+        # TODO check we aren't samplign the same point several times, that sounds bad
         samples = probability_distribution.sample((indices.shape[0],))
         resampled_neuron_outs = resample_mlp_post_acts[samples]
 
@@ -137,15 +137,9 @@ class SAE(HookedRootModule):
                     raise ValueError(f"Unexpected dict_idx {dict_idx}")
 
         # Check that the opt is really updated
-
-        # Reset all the Adam parameters
-        # This didn't remotely seem to change the situation but still here it is
-
         for dict_idx, (k, v) in enumerate(opt.state.items()):
             for v_key in ["exp_avg", "exp_avg_sq"]:
                 if dict_idx == 0:
                     assert k.data.shape == (self.d_in, self.d_sae)
-                    try:
-                        assert (v[v_key][:, indices]).abs().max().item() < 1e-6
-                    except Exception as e: 
-                        print("Warning: it does not seem as if resetting the Adam parameters worked: " + str(e))
+                        if (v[v_key][:, indices]).abs().max().item() > 1e-6:
+                            print("Warning: it does not seem as if resetting the Adam parameters worked")
