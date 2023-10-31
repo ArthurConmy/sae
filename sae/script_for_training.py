@@ -11,11 +11,12 @@ def run_script(threshold, gpu_id, kwargs):
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     args = ["python", os.path.expanduser("~/sae/sae/script_for_training.py")]
     args.extend([f"--lr={kwargs['lr']}", f"--l1_lambda={kwargs['l1_lambda']}", f"--seed={kwargs['seed']}"])
+    print(" ".join(args))
     subprocess.run(args, env=env)
 
 if __name__ == '__main__':
 
-    num_gpus = 1  # Number of GPUs available
+    num_gpus = 8  # Number of GPUs available
     num_jobs_per_gpu = 1  # Number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
