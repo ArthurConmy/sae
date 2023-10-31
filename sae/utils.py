@@ -115,8 +115,9 @@ def get_batch_tokens(
 
     while batch_tokens.shape[0] < batch_size:
         s = next(dataset)["text"]
-        tokens = lm.to_tokens(s, truncate=False, move_to_device=True)
-        token_len = tokens.shape[1]
+        tokens = lm.to_tokens(s, truncate=False, move_to_device=True).squeeze(0)
+        assert len(tokens.shape) == 1, f"tokens.shape should be 1D but was {tokens.shape}"
+        token_len = tokens.shape[0]
 
         while token_len > 0:
             # Space left in the current batch
@@ -124,17 +125,17 @@ def get_batch_tokens(
 
             # If the current tokens fit entirely into the remaining space
             if token_len <= space_left:
-                current_batch.append(tokens[:, :token_len])
+                current_batch.append(tokens[:token_len])
                 current_length += token_len
                 break
 
             else:
                 # Take as much as will fit
-                current_batch.append(tokens[:, :space_left])
+                current_batch.append(tokens[:space_left])
                 
                 # Remove used part, add BOS
-                tokens = tokens[:, space_left:]
-                tokens = torch.cat((lm.tokenizer.bos_token_id*torch.ones(size=(tokens.shape[0], 1), dtype=torch.long, device=tokens.device), tokens), dim=1)
+                tokens = tokens[space_left:]
+                tokens = torch.cat((torch.LongTensor([lm.tokenizer.bos_token_id]).to(tokens.device), tokens), dim=0)
 
                 token_len -= space_left 
                 token_len += 1
@@ -142,8 +143,8 @@ def get_batch_tokens(
 
             # If a batch is full, concatenate and move to next batch
             if current_length == seq_len:
-                full_batch = torch.cat(current_batch, dim=1)
-                batch_tokens = torch.cat((batch_tokens, full_batch), dim=0)
+                full_batch = torch.cat(current_batch, dim=0)
+                batch_tokens = torch.cat((batch_tokens, full_batch.unsqueeze(0)), dim=0)
                 current_batch = []
                 current_length = 0
 

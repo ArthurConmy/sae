@@ -104,6 +104,8 @@ if ipython is None:
     cfg = {**_default_cfg}
     for k, v in vars(args).items():
         cfg[k] = v
+    if cfg["testing"]:
+        print("!!! !!! Are you sure you are correctly launching this CLI run??? It has testing enabled")
 
 else:
     cfg = {
@@ -115,6 +117,9 @@ if (cfg["activation_training_order"] == "ordered") != (cfg["buffer_size"] is Non
     raise ValueError(f'We train activations shuffled iff we have a buffer')
 
 sae_batch_size = cfg["batch_size"] * cfg["seq_len"]
+
+if cfg["testing"]:
+    cfg["buffer_size"] = 2**17
 
 # %%
 
@@ -155,12 +160,15 @@ opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg[
 
 #%%
 
-if cfg["activation_training_order"] == "shuffled":
-    buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu()
-    # Hopefully ~800 million elements doesn't blow up CPU
+start_time = time.time()
 
 # def my_profiling():
 if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
+
+    if cfg["activation_training_order"] == "shuffled":
+        buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu()
+        # Hopefully ~800 million elements doesn't blow up CPU
+
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
     last_test_every = -1
 
@@ -206,25 +214,39 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         else:
             if buffer.shape[0] < cfg["buffer_size"] // 2:
-                # We need to refill the buffer
+                if cfg["testing"] and buffer.shape[0] > 0:
+                    print(time.time()-start_time)
+                    raise Exception("We have finished iterating")
+                    # return
 
+                # We need to refill the buffer
                 refill_iterator = range(0, batch_tokens.shape[0], cfg["batch_size"])
+                total_size = len(refill_iterator) * cfg["batch_size"] * cfg["seq_len"] + buffer.shape[0]
                 if cfg["testing"]:
                     refill_iterator = tqdm(refill_iterator, desc="Refill")
 
+                # Initialize empty tensor buffer of the maximum required size
+                new_buffer = torch.zeros(total_size, *buffer.shape[1:], dtype=buffer.dtype).cpu()
+
+                # Fill existing buffer
+                new_buffer[:buffer.shape[0]] = buffer
+
+                # Insert activations directly into pre-allocated buffer
+                insert_idx = buffer.shape[0]
                 for refill_batch_idx_start in refill_iterator:
-                    refill_batch_tokens = batch_tokens[refill_batch_idx_start:refill_batch_idx_start+cfg["batch_size"]]
+                    refill_batch_tokens = batch_tokens[refill_batch_idx_start:refill_batch_idx_start + cfg["batch_size"]]
                     refill_mlp_post_acts = get_activations(
                         lm=lm,
                         cfg=cfg,
                         batch_tokens=refill_batch_tokens,
                         act_name=cfg["act_name"],
                     ).cpu()
-                    buffer = torch.cat((buffer, refill_mlp_post_acts.cpu()), dim=0)
 
-                    # This can all be farily expensive, so do a garbage collection
-                    gc.collect()
-                    torch.cuda.empty_cache()
+                    new_buffer[insert_idx:insert_idx + refill_mlp_post_acts.shape[0]] = refill_mlp_post_acts
+                    insert_idx += refill_mlp_post_acts.shape[0]
+
+                # Truncate unused space in new_buffer
+                buffer = new_buffer[:insert_idx]
 
                 # Shuffle buffer
                 buffer = buffer[torch.randperm(buffer.shape[0])]
