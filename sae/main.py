@@ -287,22 +287,24 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         
         if cfg["save_state_dict_every"](step_idx):
             # First save the state dict to weights/
-            fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
-            torch.save(sae.state_dict(), fname)
-            
-            # Log the last weights to wandb
-            # Save as wandb artifact
+            fbuffer = io.BytesIO()
+            torch.save(sae.state_dict(), fbuffer)
+            fbuffer.seek(0)
+        
+            # Create wandb Artifact
             artifact = wandb.Artifact(
                 name=f"weights_{run_name}",
                 type="weights",
                 description="Weights for SAE",
             )
             
-            with open(fname, 'rb') as f:
-                artifact.add_file(f, name=f"{run_name}.pt")
+            artifact.add(wandb.Asset(fbuffer, f"{run_name}.pt"), f"{run_name}.pt")
+            
+            # Log the artifact to wandb
             wandb.log_artifact(artifact)
-
-            os.remove(fname)
+        
+            # Clear the buffer
+            fbuffer.close()
 
         if cfg["resample_sae_neurons_every"](step_idx):
             # And figure out how frequently all the features fire
