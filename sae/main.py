@@ -86,13 +86,13 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
     "wandb_group": None,
     "resample_mode": "reinit", # Either "reinit" or "Anthropic"
-    "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great
+    "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
     "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
     "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
     "dtype": torch.float32, 
     "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
     "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-    "buffer_size": 2**20, # Size of the buffer
+    "buffer_size": 2**21, # Size of the buffer
     "buffer_device": "cuda:0", # Size of the buffer
     "testing": False,
 }
