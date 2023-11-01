@@ -1,5 +1,3 @@
-from sae.model import SAE
-# from sae.buffer import Buffer
 from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
 import torch
 import transformer_lens
@@ -20,6 +18,16 @@ from time import ctime
 from dataclasses import dataclass
 import einops
 import wandb
+from torch import nn
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch.optim import Adam
+from torch.optim.lr_scheduler import LambdaLR
+from pathlib import Path
+from pprint import pprint
+from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
+from torch.utils.data import Dataset
+from transformer_lens import utils
 
 def loss_fn(
     sae_reconstruction,
@@ -63,13 +71,13 @@ def train_step(
     # (d_sae, d_in) shape
     with torch.no_grad():
         parallel_component = einops.einsum(
-            sae.W_out.grad,
-            sae.W_out.data,
+            sae.W_dec.grad,
+            sae.W_dec.data,
             "d_sae d_in, d_sae d_in -> d_sae",
         )
-        sae.W_out.grad -= einops.einsum(
+        sae.W_dec.grad -= einops.einsum(
             parallel_component,
-            sae.W_out.data,
+            sae.W_dec.data,
             "d_sae, d_sae d_in -> d_sae d_in",
         )
 
@@ -78,16 +86,16 @@ def train_step(
 
     # We move off the sphere! (Note also Adam has momentum-like components) So, we still renormalize to have unit norm 
     with torch.no_grad():
-        # Renormalize W_out to have unit norm
-        norms = torch.norm(sae.W_out.data, dim=1, keepdim=True)
+        # Renormalize W_dec to have unit norm
+        norms = torch.norm(sae.W_dec.data, dim=1, keepdim=True)
         metrics = { # Mostly to sanity check that these aren't wildly different to 1!
             **metrics,
-            "W_out_norms_mean": norms.mean().item(),
-            "W_out_norms_std": norms.std().item(),
-            "W_out_norms_min": norms.min().item(),
-            "W_out_norms_max": norms.max().item(),
+            "W_dec_norms_mean": norms.mean().item(),
+            "W_dec_norms_std": norms.std().item(),
+            "W_dec_norms_min": norms.min().item(),
+            "W_dec_norms_max": norms.max().item(),
         }
-        sae.W_out.data /= (norms + 1e-6) # Eps for numerical stability I hope
+        sae.W_dec.data /= (norms + 1e-6) # Eps for numerical stability I hope
 
     if test_data is not None:
         test_loss_metrics = loss_fn(*sae(test_data), ground_truth=test_data, l1_lambda=cfg["l1_lambda"])
@@ -173,3 +181,68 @@ def get_activations(
         return activations.reshape(-1, cfg["d_in"])
     else:
         return activations
+
+def get_neel_model(version = 1):
+    """
+    Loads the saved autoencoder from HuggingFace.
+
+    Version is expected to be an int, or "run1" or "run2"
+
+    version 25 is the final checkpoint of the first autoencoder run,
+    version 47 is the final checkpoint of the second autoencoder run.
+    """
+
+    if version==1:
+        version = 25
+    elif version==2:
+        version = 47
+    else:
+        raise ValueError("Version must be 1 or 2")
+
+    cfg = utils.download_file_from_hf("NeelNanda/sparse_autoencoder", f"{version}_cfg.json")
+    pprint("Loading this checkpoint:")
+    pprint(str(cfg))
+    state_dict = utils.download_file_from_hf("NeelNanda/sparse_autoencoder", f"{version}.pt", force_is_torch=True)
+    return cfg, state_dict
+
+def get_cfg(**kwargs) -> Dict[str, Any]:
+    cur_dict = { # TODO remove Any
+        "seed": 1,  # RNG seed for reproducibility. Lol I think `1` is a better SAE?
+        "batch_size": 32,  # Number of samples we pass through THE LM
+        "seq_len": 128,  # Length of each input sequence for the model
+        "d_in": None,  # Input dimension for the encoder model
+        "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
+        "lr": 7 * 1e-5,  # This is because Neel uses L2, and I think we should use mean squared error
+        "l1_lambda": 3.6 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+        "dataset": "c4",  # Name of the dataset to use
+        "dataset_args": ["en"],  # Any additional arguments for the dataset
+        "dataset_kwargs": {"split": "train", "streaming": True}, 
+        # Keyword arguments for dataset. Highly recommend streaming for massive datasets!
+        "beta1": 0.9,  # Adam beta1
+        "beta2": 0.99,  # Adam beta2
+        "act_name": "blocks.0.mlp.hook_post",
+        "num_tokens": int(2e12), # Number of tokens to train on 
+        "wandb_mode": "online", 
+        "test_set_batch_size": 20, # 20 Sequences
+        "test_every": 100,
+        "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
+        "wandb_group": None,
+        "resample_mode": "reinit", # Either "reinit" or "Anthropic"
+        "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
+        "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
+        "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
+        "dtype": torch.float32, 
+        "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
+        "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
+        "buffer_size": 2**21, # Size of the buffer
+        "buffer_device": "cuda:0", # Size of the buffer
+        "testing": False,
+        "delete_cache": False, # TODO make this parsed better, likely is just a string
+    }
+
+    for k, v in kwargs.items():
+        if k not in cur_dict:
+            raise ValueError(f"Unknown config key {k}")
+        cur_dict[k] = v
+
+    return cur_dict

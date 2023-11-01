@@ -1,0 +1,131 @@
+wandb_version: 1
+
+seed:
+  desc: null
+  value: 1
+batch_size:
+  desc: null
+  value: 32
+seq_len:
+  desc: null
+  value: 128
+d_in:
+  desc: null
+  value: 2048
+d_sae:
+  desc: null
+  value: 16384
+lr:
+  desc: null
+  value: 7.000000000000001e-05
+l1_lambda:
+  desc: null
+  value: 0.00036
+dataset:
+  desc: null
+  value: c4
+dataset_args:
+  desc: null
+  value:
+  - en
+dataset_kwargs:
+  desc: null
+  value:
+    split: train
+    streaming: true
+beta1:
+  desc: null
+  value: 0.9
+beta2:
+  desc: null
+  value: 0.99
+act_name:
+  desc: null
+  value: blocks.0.mlp.hook_post
+num_tokens:
+  desc: null
+  value: 2000000000000
+wandb_mode:
+  desc: null
+  value: online
+test_set_batch_size:
+  desc: null
+  value: 20
+test_every:
+  desc: null
+  value: 100
+save_state_dict_every:
+  desc: null
+  value: __main__.<lambda>
+wandb_group:
+  desc: null
+  value: null
+resample_mode:
+  desc: null
+  value: reinit
+resample_sae_neurons_every:
+  desc: null
+  value: __main__.<lambda>
+resample_sae_neurons_cutoff:
+  desc: null
+  value: 1.0e-05
+resample_sae_neurons_batches_covered:
+  desc: null
+  value: 10
+dtype:
+  desc: null
+  value: torch.float32
+device:
+  desc: null
+  value: cuda
+activation_training_order:
+  desc: null
+  value: shuffled
+buffer_size:
+  desc: null
+  value: 2097152
+buffer_device:
+  desc: null
+  value: cuda:0
+testing:
+  desc: null
+  value: false
+delete_cache:
+  desc: null
+  value: false
+_wandb:
+  desc: null
+  value:
+    python_version: 3.10.6
+    cli_version: 0.15.12
+    framework: huggingface
+    huggingface_version: 4.33.1
+    is_jupyter_run: true
+    is_kaggle_kernel: false
+    start_time: 1698870782.059895
+    t:
+      1:
+      - 1
+      - 11
+      - 49
+      - 51
+      - 55
+      - 71
+      2:
+      - 1
+      - 11
+      - 49
+      - 51
+      - 55
+      - 71
+      3:
+      - 13
+      - 16
+      - 23
+      4: 3.10.6
+      5: 0.15.12
+      6: 4.33.1
+      8:
+      - 1
+      - 5
+      13: linux-x86_64

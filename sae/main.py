@@ -34,7 +34,7 @@ import wandb
 
 from sae.model import SAE
 from sae.plotly_utils import hist, scatter
-from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations
+from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, get_neel_model, get_cfg
 
 #%%
 
@@ -42,7 +42,7 @@ lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 
 #%%
 
-# # Neel's config
+# # Neel's config # Better: LOAD from HF
 # default_cfg = {
 #     "seed": 49,
 #     "batch_size": 4096,
@@ -64,47 +64,14 @@ lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 # cfg["buffer_batches"] = cfg["buffer_size"] // cfg["seq_len"]
 # pprint.pprint(cfg)
 
-_default_cfg: Dict[str, Any] = { # TODO remove Any
-    "seed": 1,  # RNG seed for reproducibility. Lol I think `1` is a better SAE?
-    "batch_size": 32,  # Number of samples we pass through THE LM
-    "seq_len": 128,  # Length of each input sequence for the model
-    "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
-    "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-    "lr": 7 * 1e-5,  # This is because Neel uses L2, and I think we should use mean squared error
-    "l1_lambda": 3.6 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
-    "dataset": "c4",  # Name of the dataset to use
-    "dataset_args": ["en"],  # Any additional arguments for the dataset
-    "dataset_kwargs": {"split": "train", "streaming": True}, 
-    # Keyword arguments for dataset. Highly recommend streaming for massive datasets!
-    "beta1": 0.9,  # Adam beta1
-    "beta2": 0.99,  # Adam beta2
-    "act_name": "blocks.0.mlp.hook_post",
-    "num_tokens": int(2e12), # Number of tokens to train on 
-    "wandb_mode": "online", 
-    "test_set_batch_size": 20, # 20 Sequences
-    "test_every": 100,
-    "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
-    "wandb_group": None,
-    "resample_mode": "reinit", # Either "reinit" or "Anthropic"
-    "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
-    "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
-    "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
-    "dtype": torch.float32, 
-    "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
-    "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-    "buffer_size": 2**21, # Size of the buffer
-    "buffer_device": "cuda:0", # Size of the buffer
-    "testing": False,
-    "delete_cache": False, # TODO make this parsed better, likely is just a string
-}
+cfg = get_cfg(d_in = lm.cfg.d_mlp)
 
 if ipython is None:
     # Parse all arguments
     parser = argparse.ArgumentParser()
-    for k, v in _default_cfg.items():
+    for k, v in cfg.items():
         parser.add_argument(f"--{k}", type=type(v), default=v)
     args = parser.parse_args()
-    cfg = {**_default_cfg}
     for k, v in vars(args).items():
         cfg[k] = v
     if cfg["testing"]:
@@ -112,17 +79,21 @@ if ipython is None:
 
 else:
     cfg = {
-        **_default_cfg,
+        **cfg, # Manual notebook overrides here
         # "wandb_mode": "offline",  # Offline wandb
     }
+
+if cfg["testing"]:
+    assert cfg["activation_training_order"] == "shuffled", cfg["activation_training_order"]
+    cfg["buffer_size"] = 2**17
 
 if (cfg["activation_training_order"] == "ordered") != (cfg["buffer_size"] is None):
     raise ValueError(f'We train activations shuffled iff we have a buffer')
 
 sae_batch_size = cfg["batch_size"] * cfg["seq_len"]
 
-if cfg["testing"]:
-    cfg["buffer_size"] = 2**17
+if cfg["buffer_size"] is not None:
+    assert sae_batch_size <= cfg["buffer_size"], f"SAE batch size {sae_batch_size} is larger than buffer size {cfg['buffer_size']}"
 
 # %%
 
@@ -177,6 +148,8 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
     prelosses = []
     
     step_iterator = range(
+        # 1,
+        # 2,
         ceil(cfg["num_tokens"] / sae_batch_size),
     )
     if cfg["testing"]:
@@ -196,7 +169,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         else:
             assert cfg["activation_training_order"] == "shuffled", cfg["activation_training_order"]
 
-            if buffer.shape[0] < cfg["buffer_size"] // 2:
+            if buffer.shape[0] <= sae_batch_size:
                 # If we have less than half the buffer size, 
                 # Generate enough new tokens to fill the buffer
                 batch_tokens = get_batch_tokens(
@@ -217,7 +190,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
 
         else:
-            if buffer.shape[0] < cfg["buffer_size"] // 2:
+            if buffer.shape[0] <= sae_batch_size:
                 print(time.time()-start_time)
                 if cfg["testing"] and step_idx > 100:
                     raise Exception("We have finished iterating")
@@ -483,3 +456,6 @@ latest_artifact.download(root=os.path.expanduser("~/sae/weights/wandb"))
 
 #%%
 
+sae.load_from_neels(2)
+
+# %%
