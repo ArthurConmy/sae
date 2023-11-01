@@ -283,7 +283,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         if step_idx%cfg["test_every"]==0:
             # Figure out the loss on the test prompts
             metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens).item()
-            metrics["loss_recovered] = (prelosses[1]-metrics["test_loss_with_sae"])/(prelosses[1]-prelosses[0])
+            metrics["loss_recovered"] = (prelosses[1]-metrics["test_loss_with_sae"])/(prelosses[1]-prelosses[0])
         
         if cfg["save_state_dict_every"](step_idx):
             # First save the state dict to weights/
