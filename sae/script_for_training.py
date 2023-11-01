@@ -16,13 +16,13 @@ def run_script(threshold, gpu_id, kwargs):
 
 if __name__ == '__main__':
 
-    num_gpus = 8  # Number of GPUs available
+    num_gpus = 3  # Number of GPUs available
     num_jobs_per_gpu = 1  # Number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     jobs = []
 
-    curspace = list(product([0.7 * 1e-4, 0.75 * 1e-4, 0.8 * 1e-4], [3.6 * 1e-4, 3.8 * 1e-4], [1]))
+    curspace = list(product([0.7 * 1e-4], [3.6 * 1e-4, 3.8 * 1e-4, 3.4 * 1e-4], [1]))
     
     for threshold_idx, threshold in enumerate(curspace):
         if threshold in used:
