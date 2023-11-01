@@ -16,7 +16,6 @@ import torch
 assert torch.cuda.device_count() == 1, torch.cuda.device_count()
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
-import io
 from math import ceil
 from random import randint
 from jaxtyping import Float, Int, Bool
@@ -288,24 +287,21 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         
         if cfg["save_state_dict_every"](step_idx):
             # First save the state dict to weights/
-            fbuffer = io.BytesIO()
-            torch.save(sae.state_dict(), fbuffer)
-            fbuffer.seek(0)
-        
-            # Create wandb Artifact
+            fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
+            torch.save(sae.state_dict(), fname)
+            
+            # Clear out, first?
+            subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
+
+            # Log the last weights to wandb
+            # Save as wandb artifact
             artifact = wandb.Artifact(
                 name=f"weights_{run_name}",
                 type="weights",
                 description="Weights for SAE",
             )
-            
-            artifact.add(wandb.Asset(fbuffer, f"{run_name}.pt"), f"{run_name}.pt")
-            
-            # Log the artifact to wandb
+            artifact.add_file(fname)
             wandb.log_artifact(artifact)
-        
-            # Clear the buffer
-            fbuffer.close()
 
         if cfg["resample_sae_neurons_every"](step_idx):
             # And figure out how frequently all the features fire
