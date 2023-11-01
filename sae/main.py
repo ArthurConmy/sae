@@ -16,6 +16,7 @@ import torch
 assert torch.cuda.device_count() == 1, torch.cuda.device_count()
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
+import io
 from math import ceil
 from random import randint
 from jaxtyping import Float, Int, Bool
