@@ -95,6 +95,7 @@ _default_cfg: Dict[str, Any] = { # TODO remove Any
     "buffer_size": 2**21, # Size of the buffer
     "buffer_device": "cuda:0", # Size of the buffer
     "testing": False,
+    "delete_cache": False, # TODO make this parsed better, likely is just a string
 }
 
 if ipython is None:
@@ -289,8 +290,13 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # First save the state dict to weights/
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
-            
 
+            if cfg["delete_cache"]:
+                try:
+                    subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
+                except Exception as e:
+                    print("Couldn't cache clear: " + str(e))
+            
             # Log the last weights to wandb
             # Save as wandb artifact
             artifact = wandb.Artifact(
@@ -304,7 +310,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             # Remove file
             # Kinda sketch
-            subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
 
         
         if cfg["resample_sae_neurons_every"](step_idx):
