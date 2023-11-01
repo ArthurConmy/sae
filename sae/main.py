@@ -290,8 +290,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
             torch.save(sae.state_dict(), fname)
             
-            # Clear out, first?
-            subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
 
             # Log the last weights to wandb
             # Save as wandb artifact
@@ -302,7 +300,13 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
             artifact.add_file(fname)
             wandb.log_artifact(artifact)
+            artifact.wait()
 
+            # Remove file
+            # Kinda sketch
+            subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
+
+        
         if cfg["resample_sae_neurons_every"](step_idx):
             # And figure out how frequently all the features fire
             # And then actually resample those neurons
