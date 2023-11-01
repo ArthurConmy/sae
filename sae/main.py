@@ -65,7 +65,7 @@ lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 # pprint.pprint(cfg)
 
 _default_cfg: Dict[str, Any] = { # TODO remove Any
-    "seed": 42,  # RNG seed for reproducibility
+    "seed": 1,  # RNG seed for reproducibility. Lol I think `1` is a better SAE?
     "batch_size": 32,  # Number of samples we pass through THE LM
     "seq_len": 128,  # Length of each input sequence for the model
     "d_in": lm.cfg.d_mlp,  # Input dimension for the encoder model
