@@ -1,7 +1,7 @@
 Coding up an SAE for a 1L model.
 
 Next steps:
-The goal is to get L0 closer to 10-20 !!!
+The goal is to get L0 closer to 10-20 rather than ~200 :-( !!!
 - Most importantly, scale the \lambda to try and deal with this
 - ... but also experiment dropping the learning rate a little, ie two-three LRs for each \lambda
 
