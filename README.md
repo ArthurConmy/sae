@@ -4,9 +4,7 @@ Coding up an SAE for a 1L model.
 
 <b> The goal is to get L0 closer to 10-20 rather than ~200 :-( !!! </b>
 
-Firstly, load in Neel's SAE (and ours???) to see L1s and qualitative interpretability.
-
-Then do the thing and try and fix current issues!!!
+Do the thing and try and fix current issues!!!
 
 - Most importantly, scale the \lambda to try and deal with this
 - ... but also experiment dropping the learning rate a little, ie two-three LRs for each \lambda
@@ -20,3 +18,5 @@ bfloat16 buffer for bigger buffer.
 Buffer only replace when it's super small.
 
 Untie the bias in and bias out?
+
+... then we sure should implement some good vizualization utils
