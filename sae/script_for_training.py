@@ -17,7 +17,7 @@ def run_script(threshold, gpu_id, keywords):
 
 if __name__ == '__main__':
 
-    num_gpus = 6  # Number of GPUs available
+    num_gpus = 7  # Number of GPUs available
     num_jobs_per_gpu = 1  # Number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
@@ -26,10 +26,6 @@ if __name__ == '__main__':
     assert len(keyword_list)==6
 
     for threshold_idx, keywords in enumerate(keyword_list):
-        if keywords in used:
-            continue
-        used.add(keywords)
-
         gpu_id = (threshold_idx // num_jobs_per_gpu) % num_gpus
         jobs.append(pool.apply_async(run_script, (keywords, gpu_id, keywords)))
     
