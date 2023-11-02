@@ -21,6 +21,7 @@ from random import randint
 from jaxtyping import Float, Int, Bool
 from datasets import load_dataset
 import subprocess
+import ast
 import time
 from IPython.display import display, HTML
 import gc
@@ -70,15 +71,19 @@ if ipython is None:
     # Parse all arguments
     parser = argparse.ArgumentParser()
     for k, v in cfg.items():
-        parser.add_argument(f"--{k}", type=type(v), default=v)
+        parser.add_argument(f"--{k}", type=type(v) if type(v)!=list else str, default=v) # Sigh lists so cursed here
     args = parser.parse_args()
     for k, v in vars(args).items():
-        cfg[k] = v
+        if k in cfg and type(cfg[k]) == list and type(v) != list:
+            cfg[k] = ast.literal_eval(v)
+        else:
+            cfg[k] = v
     if cfg["testing"]:
         print("!!! !!! Are you sure you are correctly launching this CLI run??? It has testing enabled")
 
 else:
     cfg = {
+        "testing": True,
         **cfg, # Manual notebook overrides here
         # "wandb_mode": "offline",  # Offline wandb
     }
@@ -104,6 +109,8 @@ dummy_sae = SAE(cfg) # For now, just keep same dimension
 
 # Get some C4 or other data from HF
 raw_all_data = iter(load_dataset(cfg["dataset"], *(cfg["dataset_args"] or []), **(cfg["dataset_kwargs"] or {})))
+
+print(cfg["resample_sae_neurons_at"], type(cfg["resample_sae_neurons_at"]), "Yeah")
 
 #%%
 
@@ -148,7 +155,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
     prelosses = []
     
     step_iterator = range(
-        # 1,
         # 2,
         ceil(cfg["num_tokens"] / sae_batch_size),
     )
@@ -285,7 +291,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # Kinda sketch
 
         
-        if cfg["resample_sae_neurons_every"](step_idx):
+        if step_idx % cfg["resample_sae_neurons_every"] == 0 or step_idx in cfg["resample_sae_neurons_at"]:
             # And figure out how frequently all the features fire
             # And then actually resample those neurons
 

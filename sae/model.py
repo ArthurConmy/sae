@@ -241,24 +241,35 @@ class SAE(HookedRootModule):
         run = api.run(f"{entity}/{project}/{run_id}")
         return run.config
 
-    def load_from_my_wandb(self, run_id: str):
+    def load_from_my_wandb(self, run_id: str, index_from_back_override=None):
         entity="ArthurConmy"
         project="sae"
         api = wandb.Api()
         run = api.run(f"{entity}/{project}/{run_id}")
 
-        len_logged_arifacts = len(list(run.logged_artifacts()))
-        for index in range(len_logged_arifacts-1, -1, -1):
+        list_logged_artifacts = list(run.logged_artifacts())
+        len_logged_arifacts = len(list_logged_artifacts)
+        for index in (range(len_logged_arifacts-1, -1, -1) if index_from_back_override is None else [-index_from_back_override]):
             try:
-                logged_artifact = list(run.logged_artifacts())[-2] 
+                logged_artifact = list_logged_artifacts[index] 
                 logged_artifact_dir = Path(logged_artifact.download())
                 dir_fnames = [p.name for p in Path(logged_artifact_dir).iterdir()]
                 assert len(dir_fnames) == 1
                 fname = dir_fnames[0]
                 state_dict = torch.load(logged_artifact_dir / fname)
+                if "W_in" in state_dict:
+                    # old format of state dict 
+                    state_dict = {
+                        "W_enc": state_dict["W_in"],
+                        "b_enc": state_dict["b_in"],
+                        "W_dec": state_dict["W_out"],
+                        "b_dec": state_dict["b_out"],
+                    }
                 self.load_state_dict(state_dict=state_dict)
             except Exception as e:
                 print(f"Tried to load the {len_logged_arifacts-index}th from last, failed due to {e}")
+            else:
+                break
 
         try:
             self.load_state_dict(state_dict=state_dict)

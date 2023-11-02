@@ -205,15 +205,15 @@ def get_neel_model(version = 1):
     state_dict = utils.download_file_from_hf("NeelNanda/sparse_autoencoder", f"{version}.pt", force_is_torch=True)
     return cfg, state_dict
 
-def get_cfg(**kwargs) -> Dict[str, Any]:
-    cur_dict = { # TODO remove Any
-        "seed": 1,  # RNG seed for reproducibility. Lol I think `1` is a better SAE?
+def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
+    cur_dict = {
+        "seed": 1, 
         "batch_size": 32,  # Number of samples we pass through THE LM
         "seq_len": 128,  # Length of each input sequence for the model
         "d_in": None,  # Input dimension for the encoder model
         "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-        "lr": 7 * 1e-5,  # This is because Neel uses L2, and I think we should use mean squared error
-        "l1_lambda": 3.6 * 1e-4, # I would have thought this needs be divided by d_in but maybe it's just tiny?!
+        "lr": 6.5 * 1e-5,  # This is low because Neel uses L2, and I think we should use mean squared error
+        "l1_lambda": 3.6 * 1e-4,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
         "dataset_kwargs": {"split": "train", "streaming": True}, 
@@ -223,12 +223,13 @@ def get_cfg(**kwargs) -> Dict[str, Any]:
         "act_name": "blocks.0.mlp.hook_post",
         "num_tokens": int(2e12), # Number of tokens to train on 
         "wandb_mode": "online", 
-        "test_set_batch_size": 20, # 20 Sequences
+        "test_set_batch_size": 100, # 20 Sequences
         "test_every": 100,
-        "save_state_dict_every": lambda step: step%10_000 == 1, # So still saves immediately
+        "save_state_dict_every": lambda step: step%37123 == 1, # So still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "reinit", # Either "reinit" or "Anthropic"
-        "resample_sae_neurons_every": lambda step: step%10_000 == 0 or step in [500, 2000], # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
+        "resample_sae_neurons_every": 30_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
+        "resample_sae_neurons_at": [500, 2000],
         "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
         "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
         "dtype": torch.float32, 
