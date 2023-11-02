@@ -17,9 +17,12 @@ assert torch.cuda.device_count() == 1, torch.cuda.device_count()
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
 from math import ceil
+import numpy as np
+import pandas as pd
 from random import randint
 from jaxtyping import Float, Int, Bool
 from datasets import load_dataset
+from transformer_lens import utils
 import subprocess
 import ast
 import time
@@ -289,7 +292,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             # Remove file
             # Kinda sketch
-
         
         if step_idx % cfg["resample_sae_neurons_every"] == 0 or step_idx in cfg["resample_sae_neurons_at"]:
             # And figure out how frequently all the features fire
@@ -358,22 +360,27 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
 #%%
 
-# Warning: random crap 
-
-# Save the state dict to weights/
-torch.save(sae.state_dict(), os.path.expanduser("~/sae/weights/last_weights.pt"))
-# Log the last weights to wandb
-wandb.save(os.path.expanduser("~/sae/weights/last_weights.pt"))
-wandb.finish()
+neel_sae = deepcopy(sae)
+neel_sae.load_from_neels(1)
 
 # %%
 
+# Load in my 300 L0 / 80% Loss Recovered
+sae.load_from_my_wandb(
+    run_id = "1fexfhi2",
+    index_from_back_override=3, # 1 did not work
+)
+
+#%%
+
 # Test how important all the neurons are ...
+# Note: this is likely a pretty high variance estimate
+
 if ipython is not None:
     with torch.no_grad():
         with torch.autocast("cuda", torch.bfloat16):
             losses = torch.FloatTensor(size=(0,)).to(lm.cfg.device)
-
+            my_cache = {}
             for neuron_idx_ablated in tqdm([None] + list(range(cfg["d_sae"])), desc="Neuron"):
                 def ablation_hook(activation, hook, type: Literal["zero", "mean"] = "mean"):
                     if neuron_idx_ablated is None:
@@ -408,60 +415,134 @@ if ipython is not None:
                     if neuron_idx_ablated % 100 == 99:
                         print(losses.topk(10))
 
+#%%
+
+# All adapted from Neel's colab
+
+SPACE = "·"
+NEWLINE="↩"
+TAB = "→"
+
+def process_token(s: Any):
+    if isinstance(s, torch.Tensor):
+        s = s.item()
+    if isinstance(s, np.int64):
+        s = s.item()
+    if isinstance(s, int):
+        s = lm.to_string(s)
+    s = s.replace(" ", SPACE)
+    s = s.replace("\n", NEWLINE+"\n")
+    s = s.replace("\t", TAB)
+    return s
+
+
+def process_tokens(l):
+    if isinstance(l, str):
+        l = lm.to_str_tokens(l)
+    elif isinstance(l, torch.Tensor) and len(l.shape)>1:
+        l = l.squeeze(0)
+    return [process_token(s) for s in l]
+
+def list_flatten(nested_list):
+    return [x for y in nested_list for x in y]
+
+def make_token_df(tokens, len_prefix=5, len_suffix=1):
+    str_tokens = [process_tokens(lm.to_str_tokens(t)) for t in tokens]
+    unique_token = [[f"{s}/{i}" for i, s in enumerate(str_tok)] for str_tok in str_tokens]
+
+    context = []
+    batch = []
+    pos = []
+    label = []
+    for b in range(tokens.shape[0]):
+        # context.append([])
+        # batch.append([])
+        # pos.append([])
+        # label.append([])
+        for p in range(tokens.shape[1]):
+            prefix = "".join(str_tokens[b][max(0, p-len_prefix):p])
+            if p==tokens.shape[1]-1:
+                suffix = ""
+            else:
+                suffix = "".join(str_tokens[b][p+1:min(tokens.shape[1]-1, p+1+len_suffix)])
+            current = str_tokens[b][p]
+            context.append(f"{prefix}|{current}|{suffix}")
+            batch.append(b)
+            pos.append(p)
+            label.append(f"{b}/{p}")
+    # print(len(batch), len(pos), len(context), len(label))
+    return pd.DataFrame(dict(
+        str_tokens=list_flatten(str_tokens),
+        unique_token=list_flatten(unique_token),
+        context=context,
+        batch=batch,
+        pos=pos,
+        label=label,
+    ))
+
 # %%
+
+hidden_acts = {}
+
+def hidden_act_hook(activation, hook):
+    hidden_acts[hook.name] = activation.cpu()
+    return activation
+
+with torch.no_grad():
+    with torch.autocast("cuda", torch.bfloat16):
+        lm.reset_hooks()
+        sae.reset_hooks()
+        logits = lm.run_with_hooks(
+            batch_tokens[:500],
+            fwd_hooks=[(cfg["act_name"], lambda activation, hook: sae.run_with_hooks(activation, fwd_hooks=[("hook_hidden_post", hidden_act_hook)])[0])],
+        )
+
+MODE = "neel" # "old"
 
 if ipython is not None:
     # Now actually study the top neuron
-    topk=5
-    top_neuron_idx = losses.topk(topk)[1][topk-1].item()
+    # topk=1
+    # top_neuron_idx = losses.topk(topk)[1][topk-1].item()
 
-    with torch.no_grad():
-        # Visualize where this damn thing fires
+    for top_neuron_idx in range(-100, -200, -12): # = 7 #,  2395, 14983, 14163,
+        if MODE == "neel":
+            prop=hidden_acts["hook_hidden_post"][:, :, top_neuron_idx].gt(0).float().mean().item()
+            if prop < 0.000001: continue 
+            print("Neuron", top_neuron_idx, "fired on avg", hidden_acts["hook_hidden_post"][:, :, top_neuron_idx].mean().item(), "and proportion", prop)
+            token_df = make_token_df(batch_tokens[:500])
+            token_df["feature"] = utils.to_numpy(hidden_acts["hook_hidden_post"][:, :, top_neuron_idx].flatten())
+            token_df = token_df.sort_values("feature", ascending=False).head(20).style.background_gradient("coolwarm")
+            display(token_df)
 
-        reshaped_test_acts = einops.rearrange(test_set, "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0])
+        elif MODE == "old":
+            with torch.no_grad():
+                # Visualize where this damn thing fires on some RANODMLY sampled sequences
+                reshaped_test_acts = einops.rearrange(test_set, "(batch seq) d_in -> batch seq d_in", batch=test_tokens.shape[0])
 
-        pre_firing_amount = sae.run_with_cache( # TODO if this ever blows up GPU, make custom hook that just saves relevant neuron
-            reshaped_test_acts,
-            names_filter = "hook_hidden_pre",
-        )[1]["hook_hidden_pre"]
-        assert len(pre_firing_amount.shape) == 3, pre_firing_amount.shape
-        sae_neuron_firing = pre_firing_amount[:, :, top_neuron_idx]
-        
-        for seq_idx in range(10):
-            display(
-                    colored_tokens(
-                        lm.to_str_tokens(
-                            test_tokens[seq_idx],
-                        ),
-                        sae_neuron_firing[seq_idx],
+                pre_firing_amount = sae.run_with_cache( # TODO if this ever blows up GPU, make custom hook that just saves relevant neuron
+                    reshaped_test_acts,
+                    names_filter = "hook_hidden_pre",
+                )[1]["hook_hidden_pre"]
+                assert len(pre_firing_amount.shape) == 3, pre_firing_amount.shape
+                sae_neuron_firing = pre_firing_amount[:, :, top_neuron_idx]
+                
+                for seq_idx in range(10):
+                    display(
+                            colored_tokens(
+                                lm.to_str_tokens(
+                                    test_tokens[seq_idx],
+                                ),
+                                sae_neuron_firing[seq_idx],
+                            )
                     )
-            )
-        print("Neuron", top_neuron_idx, "fired", sae_neuron_firing.sum().item(), "times")
-        print(sae_neuron_firing.mean()) # >0 a lot???
-
-# %%
-
-if ipython is not None:
-    # Save the state dict to weights/
-    torch.save(sae.state_dict(), os.path.expanduser("~/sae/weights/last_weights.pt"))
-    # Log the last weights to wandb
-    wandb.save(os.path.expanduser("~/sae/weights/last_weights.pt"))
+                print("Neuron", top_neuron_idx, "fired", sae_neuron_firing.sum().item(), "times")
+                print(sae_neuron_firing.mean()) # >0 a lot???
 
 #%%
 
-# Load back artifact # TODO test why this seems so broken...
-run_id = "4fl2qtec"
-run = wandb.Api().run(f"sae/{run_id}")
-# artifact = run.use_artifact(artifact_name)
-
-# %%
-
-l = list(run.logged_artifacts())
-latest_artifact = l[-2]
-latest_artifact.download(root=os.path.expanduser("~/sae/weights/wandb"))
-
-#%%
-
-sae.load_from_neels(2)
+feature_id = 2395
+token_df = make_token_df(test_tokens)
+token_df["feature"] = utils.to_numpy(hidden_acts["hook_hidden_post"][:, :, feature_id].flatten())
+token_df.sort_values("feature", ascending=False).head(20).style.background_gradient("coolwarm")
 
 # %%

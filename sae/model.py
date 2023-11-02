@@ -28,7 +28,7 @@ class SAE(HookedRootModule):
         self.W_enc = nn.Parameter(
             torch.nn.init.kaiming_uniform_(
                 torch.empty(self.d_in, self.d_sae, dtype=self.dtype, device=self.device)
-            )
+            )   
         )
         self.b_enc = nn.Parameter(
             torch.zeros(self.d_sae, dtype=self.dtype, device=self.device)
@@ -42,7 +42,7 @@ class SAE(HookedRootModule):
 
         with torch.no_grad():
             # Anthropic normalize this to have unit columns
-            self.W_dec /= torch.norm(self.W_dec, dim=1, keepdim=True)
+            self.W_dec.data /= torch.norm(self.W_dec.data, dim=1, keepdim=True)
 
         self.b_dec = nn.Parameter(
             torch.zeros(self.d_in, dtype=self.dtype, device=self.device)

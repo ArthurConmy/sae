@@ -61,7 +61,7 @@ def train_step(
     mini_batch,
     test_data=None,
 ):
-    opt.zero_grad(True)
+    opt.zero_grad()
     # TODO benchmark whether grad adjustment is expensive here
     
     metrics = loss_fn(*sae(mini_batch), ground_truth=mini_batch, l1_lambda=cfg["l1_lambda"])
