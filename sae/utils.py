@@ -56,9 +56,10 @@ def loss_fn(
 
 def train_step(
     sae, 
-    opt, 
+    opt,
     cfg,
     mini_batch,
+    sched=None, 
     test_data=None,
 ):
     opt.zero_grad()
@@ -82,6 +83,9 @@ def train_step(
         )
 
     opt.step()
+    if sched is not None:
+        sched.step()
+        metrics["lr"] = opt.param_groups[0]["lr"]
     opt.zero_grad()
 
     # We move off the sphere! (Note also Adam has momentum-like components) So, we still renormalize to have unit norm 
@@ -229,13 +233,13 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "wandb_group": None,
         "resample_mode": "reinit", # Either "reinit" or "Anthropic"
         "resample_sae_neurons_every": 30_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
-        "resample_sae_neurons_at": [500, 2000],
-        "resample_sae_neurons_cutoff": 1e-5, # Maybe resample fewer later...
+        "resample_sae_neurons_at": [],
+        "resample_sae_neurons_cutoff": 5.5 * 1e-6, # Maybe resample fewer later...
         "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
         "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-        "buffer_size": 2**21, # Size of the buffer
+        "buffer_size": 2**19, # Size of the buffer
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
