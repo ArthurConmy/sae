@@ -141,6 +141,7 @@ wandb.init(
 
 sae = deepcopy(dummy_sae) # Reinitialize `sae`
 opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
+sched = None
 
 #%%
 
@@ -260,7 +261,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             continue
 
-        metrics = train_step(sae=sae, opt=opt, cfg=cfg, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
+        metrics = train_step(sae=sae, opt=opt, sched=sched, cfg=cfg, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
         running_frequency_counter += metrics["did_fire_logged"]
 
         if step_idx%cfg["test_every"]==0:
@@ -356,7 +357,13 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts, mode=cfg["resample_mode"])
 
         metrics["step_idx"] = step_idx
-        wandb.log(metrics)
+
+        if len(metrics) != 12 or step_idx % 20 == 0: # Less frequent logging
+            wandb.log(metrics)
+
+        if step_idx == 7 and len(metrics) != 12: # Something random
+            print("NOOOOOOOOOOOOOOOOOOOOOOOOOOO! You messed this up, len(metrics changed)")
+            wandb.log({"L": 1})
 
 #%%
 
