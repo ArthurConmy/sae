@@ -84,7 +84,7 @@ def train_step(
         )
 
     opt.step()
-    if sched is not None and step_idx < cfg["sched_epochs"]:
+    if sched is not None and (not cfg["sched_finish"] or step_idx < cfg["sched_epochs"]):
         sched.step()
 
     metrics["lr"] = opt.param_groups[0]["lr"]
@@ -237,8 +237,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "wandb_group": None,
         "resample_mode": "reinit", # Either "reinit" or "Anthropic"
         "resample_sae_neurons_every": 30_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
-        "resample_sae_neurons_at": [],
-        "resample_sae_neurons_cutoff": 5.5 * 1e-6, # Maybe resample fewer later...
+        "resample_sae_neurons_at": [150*20, 300*20],
+        "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
         "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
         "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
@@ -248,8 +248,11 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
         "sched_type": "cosine_annealing", # Mark as None if not using 
-        "sched_epochs": 100 * 20, # Think that's right???
-        "sched_lr_factor": 0.01,
+        "sched_epochs": 100*20, # Think that's right???
+        "sched_lr_factor": 0.1,
+        "sched_warmup_epochs": 100*20,
+        "sched_finish": True,
+        "reinit_factor": 0.2,
     }
 
     for k, v in kwargs.items():

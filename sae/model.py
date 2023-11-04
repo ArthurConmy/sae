@@ -121,6 +121,7 @@ class SAE(HookedRootModule):
         opt,
         resample_sae_loss_increases,
         resample_mlp_post_acts,
+        reinit_factor=0.2,
         mode="anthropic",
     ):
         """Do Anthropic-style resampling.
@@ -137,7 +138,7 @@ class SAE(HookedRootModule):
                 torch.empty(
                     self.d_in, indices.shape[0], dtype=self.dtype, device=self.device
                 )
-            )
+            ) * reinit_factor
             new_b_enc = torch.zeros(
                 indices.shape[0], dtype=self.dtype, device=self.device
             )

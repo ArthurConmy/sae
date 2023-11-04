@@ -127,7 +127,7 @@ try:
 except Exception as e:
     print("Couldn't read file", __file__, "due to", str(e), "so not adding notes")
 
-run_name = ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))
+run_name = f'LR-{cfg["lr"]}-LAMBDA-{cfg["l1_lambda"]}-{ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))}'
 
 wandb.init(
     project="sae",
@@ -144,6 +144,9 @@ wandb.init(
 sae = deepcopy(dummy_sae) # Reinitialize `sae`
 opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
 sched = None if cfg["sched_type"] is None else torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["sched_epochs"], eta_min=cfg["lr"]*cfg["sched_lr_factor"])
+if sched is not None: 
+    for _ in range(cfg["sched_warmup_epochs"]):
+        sched.step()
 
 #%%
 
@@ -301,7 +304,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # And then actually resample those neurons
 
             # Now compute dead neurons
-            current_frequency_counter = running_frequency_counter.float() / (sae_batch_size * (step_idx - last_test_every))
+            current_frequency_counter = running_frequency_counter.float() / (sae_batch_size * (step_idx - last_test_every)) # TODO implement exactly the Anthropic thing
             last_test_every = step_idx
 
             fig = hist(
@@ -356,7 +359,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             if indices.numel() > 0:
                 # If there are any neurons we should resample, do this
-                sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts, mode=cfg["resample_mode"])
+                sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts, mode=cfg["resample_mode"], reinit_factor=cfg["resample_reinit_factor"])
 
         metrics["step_idx"] = step_idx
 
