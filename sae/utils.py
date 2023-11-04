@@ -59,6 +59,7 @@ def train_step(
     opt,
     cfg,
     mini_batch,
+    step_idx,
     sched=None, 
     test_data=None,
 ):
@@ -83,9 +84,10 @@ def train_step(
         )
 
     opt.step()
-    if sched is not None:
+    if sched is not None and cfg["sched_epochs"] < step_idx:
         sched.step()
-        metrics["lr"] = opt.param_groups[0]["lr"]
+
+    metrics["lr"] = opt.param_groups[0]["lr"]
     opt.zero_grad()
 
     # We move off the sphere! (Note also Adam has momentum-like components) So, we still renormalize to have unit norm 
@@ -216,8 +218,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "seq_len": 128,  # Length of each input sequence for the model
         "d_in": None,  # Input dimension for the encoder model
         "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-        "lr": 6.5 * 1e-5,  # This is low because Neel uses L2, and I think we should use mean squared error
-        "l1_lambda": 3.6 * 1e-4,
+        "lr": 0.01,  # This is low because Neel uses L2, and I think we should use mean squared error
+        "l1_lambda": 0.0002,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
         "dataset_kwargs": {"split": "train", "streaming": True}, 
@@ -243,6 +245,9 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
+        "sched_type": "cosine_annealing", # Mark as None if not using 
+        "sched_epochs": 100,
+        "sched_lr_factor": 0.01,
     }
 
     for k, v in kwargs.items():

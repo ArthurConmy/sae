@@ -10,10 +10,12 @@ if ipython is not None:
     ipython.run_line_magic("load_ext", "autoreload")
     ipython.run_line_magic("load_ext", "line_profiler")    
     ipython.run_line_magic("autoreload", "2")
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
 import torch
 assert torch.cuda.device_count() == 1, torch.cuda.device_count()
+
+from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
 import transformer_lens
 from circuitsvis.tokens import colored_tokens
 from math import ceil
@@ -141,7 +143,7 @@ wandb.init(
 
 sae = deepcopy(dummy_sae) # Reinitialize `sae`
 opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
-sched = None
+sched = None if cfg["sched_type"] is None else torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["sched_epochs"], eta_min=cfg["lr"]*cfg["sched_lr_factor"])
 
 #%%
 
@@ -261,7 +263,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             continue
 
-        metrics = train_step(sae=sae, opt=opt, sched=sched, cfg=cfg, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
+        metrics = train_step(sae=sae, opt=opt, sched=sched, step_idx=step_idx, cfg=cfg, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
         running_frequency_counter += metrics["did_fire_logged"]
 
         if step_idx%cfg["test_every"]==0:
