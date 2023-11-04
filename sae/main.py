@@ -90,7 +90,7 @@ else:
     cfg = {
         "testing": True,
         **cfg, # Manual notebook overrides here
-        # "wandb_mode": "offline",  # Offline wandb
+        # "wandb_mode_online_override": True,  # Offline wandb
     }
 
 if cfg["testing"]:
@@ -135,7 +135,7 @@ wandb.init(
     job_type="train",
     config=cfg,
     name=run_name,
-    mode=cfg["wandb_mode"],
+    mode="offline" if cfg["testing"] or cfg["wandb_mode_online_override"] else "online",
     notes=wandb_notes,
 )   
 
@@ -360,11 +360,13 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         metrics["step_idx"] = step_idx
 
-        if len(metrics) != 12 or step_idx % 20 == 0: # Less frequent logging
+        if len(metrics) != 9 or step_idx % 20 == 0: # Less frequent logging
             wandb.log(metrics)
 
-        if step_idx == 7 and len(metrics) != 12: # Something random
-            print("NOOOOOOOOOOOOOOOOOOOOOOOOOOO! You messed this up, len(metrics changed)")
+        if step_idx == 7 and len(metrics) != 9: # Something random
+            print("*"*100)
+            print(f"NOOOOOOOOOOOOOOOOOOOOOOOOOOO! You messed this up, len(metrics) changed to {len(metrics)}")
+            print("*"*100)
             wandb.log({"L": 1})
 
 #%%

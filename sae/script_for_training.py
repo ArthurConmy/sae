@@ -17,7 +17,7 @@ def run_script(threshold, gpu_id, keywords):
 
 if __name__ == '__main__':
 
-    num_gpus = 1  # Number of GPUs available
+    num_gpus = 2 # Number of GPUs available
     num_jobs_per_gpu = 1  # Number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)

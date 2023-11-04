@@ -84,7 +84,7 @@ def train_step(
         )
 
     opt.step()
-    if sched is not None and cfg["sched_epochs"] < step_idx:
+    if sched is not None and step_idx < cfg["sched_epochs"]:
         sched.step()
 
     metrics["lr"] = opt.param_groups[0]["lr"]
@@ -94,13 +94,15 @@ def train_step(
     with torch.no_grad():
         # Renormalize W_dec to have unit norm
         norms = torch.norm(sae.W_dec.data, dim=1, keepdim=True)
-        metrics = { # Mostly to sanity check that these aren't wildly different to 1!
-            **metrics,
-            "W_dec_norms_mean": norms.mean().item(),
-            "W_dec_norms_std": norms.std().item(),
-            "W_dec_norms_min": norms.min().item(),
-            "W_dec_norms_max": norms.max().item(),
-        }
+
+        # # ... These are indeed really close to 1, almost all the time... with norm low
+        # metrics = { # Mostly to sanity check that these aren't wildly different to 1!
+        #     **metrics,
+        #     "W_dec_norms_mean": norms.mean().item(),
+        #     "W_dec_norms_std": norms.std().item(),
+        #     "W_dec_norms_min": norms.min().item(),
+        #     "W_dec_norms_max": norms.max().item(),
+        # }
         sae.W_dec.data /= (norms + 1e-6) # Eps for numerical stability I hope
 
     if test_data is not None:
@@ -228,8 +230,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "beta2": 0.99,  # Adam beta2
         "act_name": "blocks.0.mlp.hook_post",
         "num_tokens": int(2e12), # Number of tokens to train on 
-        "wandb_mode": "online", 
         "test_set_batch_size": 100, # 20 Sequences
+        "wandb_mode_online_override": False, # Even if in testing, wandb online anyways
         "test_every": 100,
         "save_state_dict_every": lambda step: step%37123 == 1, # So still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
@@ -246,7 +248,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
         "sched_type": "cosine_annealing", # Mark as None if not using 
-        "sched_epochs": 100,
+        "sched_epochs": 100 * 20, # Think that's right???
         "sched_lr_factor": 0.01,
     }
 
