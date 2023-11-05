@@ -232,11 +232,11 @@ class SAE(HookedRootModule):
             sum_of_all_norms = torch.norm(self.W_enc.data, dim=0).sum()
             sum_of_all_norms -= len(indices)
             average_norm = sum_of_all_norms / (self.d_sae - len(indices))
-            metrics["average_norm"] = average_norm.item()
+            metrics["resample_norm_thats_hopefully_less_or_around_one"] = average_norm.item()
             self.W_enc.data[:, indices] *= self.cfg["resample_factor"] * average_norm
 
         else:
-            self.W_enc.data[:, indices] *= 0.2
+            self.W_enc.data[:, indices] *= self.cfg["resample_factor"]
 
     @torch.no_grad()
     def resample_neurons(
@@ -261,46 +261,6 @@ class SAE(HookedRootModule):
         elif self.cfg["resample_mode"] == "anthropic":
             # Anthropic resampling
             self.anthropic_resample(indices=indices, opt=opt, lm=lm, dataset=dataset, metrics=metrics)
-
-            # unnormalized_probability_distribution = torch.nn.functional.relu(
-            #     resample_sae_loss_increases
-            # )
-            # probability_distribution = Categorical(
-            #     probs=unnormalized_probability_distribution
-            #     / unnormalized_probability_distribution.sum()
-            # )
-
-            # # Sample len(indices) number of indices
-            # # TODO check we aren't sampling the same point several times, that sounds bad
-            # samples = probability_distribution.sample((indices.shape[0],))
-            # resampled_neuron_outs = resample_mlp_post_acts[samples]
-
-            # # Replace W_dec with normalized versions of these
-            # self.W_dec.data[indices, :] = (
-            #     (
-            #         resampled_neuron_outs
-            #         / torch.norm(resampled_neuron_outs, dim=1, keepdim=True)
-            #     )
-            #     .to(self.dtype)
-            #     .to(self.device)
-            # )
-
-            # # Set biases to zero
-            # self.b_enc.data[indices] = 0.0
-
-            # # Set W_enc equal to W_dec.T in these indices, first
-            # self.W_enc.data[:, indices] = self.W_dec.data[indices, :].T
-
-            # # Then, change norms to be equal to 0.2 times the average norm of all the other columns, if other columns exist
-            # if indices.shape[0] < self.d_sae:
-            #     sum_of_all_norms = torch.norm(self.W_enc.data, dim=0).sum()
-            #     sum_of_all_norms -= len(indices)
-            #     average_norm = sum_of_all_norms / (self.d_sae - len(indices))
-            #     self.W_enc.data[:, indices] *= 0.2 * average_norm
-
-            # else:
-            #     self.W_enc.data[:, indices] *= 0.2
-
         else:
             raise ValueError(f"Unexpected {self.cfg['resample_mode']=}")
 

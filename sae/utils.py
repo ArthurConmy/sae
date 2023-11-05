@@ -255,6 +255,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_finish": True,
         "resample_factor": 0.2,
         "log_everything": False,
+        "anthropic_resample_last": 1200,
     }
 
     for k, v in kwargs.items():

@@ -8,7 +8,12 @@ Best: 137 L0 and 90% loss recovered; https://wandb.ai/arthurconmy/sae/runs/6i5td
 
 TODO: 
 
-Look into bug where a lot looks to be resampled, despite firing frequencies telling a different story
+Implement Learning Rate pruner after resampling
+
+
+Look into bug where a lot looks to be resampled, despite firing frequencies telling a different story.
+
+
 
 Other ideas:
 
@@ -17,5 +22,7 @@ Other ideas:
 * Untie the bias in and bias out?
 
 * Do this all on MLP out not hidden???
+
+* Should we really be doing bias initialized to 0 in reinits? Seems like it makes a lot of non-zero fires, eek
 
 ... then we sure should implement some good vizualization utils

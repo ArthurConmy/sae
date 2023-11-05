@@ -2,7 +2,6 @@
 
 import os 
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Ignores a warning, unsure if this option is right
-os.environ["ACCELERATE_DISABLE_RICH"] = "1"
 
 from IPython import get_ipython
 ipython = get_ipython()
