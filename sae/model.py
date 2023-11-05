@@ -135,7 +135,7 @@ class SAE(HookedRootModule):
             torch.empty(
                 self.d_in, indices.shape[0], dtype=self.dtype, device=self.device
             )
-        ) * self.cfg["reinit_factor"]
+        ) * self.cfg["resample_factor"]
         new_b_enc = torch.zeros(
             indices.shape[0], dtype=self.dtype, device=self.device
         )
@@ -155,13 +155,14 @@ class SAE(HookedRootModule):
         opt,
         lm,
         dataset,
+        metrics,
     ):
         anthropic_iterator = range(0, self.cfg["anthropic_resample_batches"], self.cfg["batch_size"])
         total_size = len(anthropic_iterator) * self.cfg["batch_size"] * self.cfg["seq_len"]
         if self.cfg["testing"]:
             anthropic_iterator = tqdm(anthropic_iterator, desc="Refill")
-        loss_increases = torch.zeros((self.cfg["anthropic_resample_batches"],), dtype=self.dtype, device=self.device)
-        input_activations = torch.zeros((self.cfg["anthropic_resample_batches"], self.d_in), dtype=self.dtype, device=self.device)
+        global_loss_increases = torch.zeros((self.cfg["anthropic_resample_batches"],), dtype=self.dtype, device=self.device)
+        global_input_activations = torch.zeros((self.cfg["anthropic_resample_batches"], self.d_in), dtype=self.dtype, device=self.device)
 
         for refill_batch_idx_start in anthropic_iterator:
             refill_batch_tokens = get_batch_tokens(
@@ -178,27 +179,43 @@ class SAE(HookedRootModule):
                 return_mode="all",
             )
 
-            normal_loss, activations_cache = lm.run_with_hooks(
+            cache=[]
+            def caching_and_replace_activation(activation, hook):
+                cache.append(activation)
+                return self.forward(activation, return_mode="sae_out")
+
+            normal_loss, normal_activations = lm.run_with_cache(
                 refill_batch_tokens,
-                fwd_hooks = [(self.cfg["act_name"], lambda activation, hook: self.forward(activation)[0])],
+                names_filter=self.cfg["act_name"],
+                return_type = "loss",
+                loss_per_token = True,
+            )
 
-        # Sample len(indices) number of indices from resample_SAE_loss_increases proportion
-        unnormalized_probability_distribution = torch.nn.functional.relu(resample_sae_loss_increases)
-        probability_distribution = Categorical(
-            probs=unnormalized_probability_distribution
-            / unnormalized_probability_distribution.sum()
+            changes_in_loss = sae_loss - normal_loss
+            changes_in_loss_dist = Categorical(
+                torch.nn.functional.relu(changes_in_loss) / torch.nn.functional.relu(changes_in_loss).sum(dim=1)
+            )
+            samples = changes_in_loss_dist.sample()
+            assert samples.shape == (self.cfg["batch_size"],), f"{samples.shape=}; {self.cfg['batch_size']=}"
+            
+            global_loss_increases[
+                refill_batch_idx_start: refill_batch_idx_start + self.cfg["batch_size"]
+            ] = changes_in_loss[torch.arange(self.cfg["batch_size"]), samples]
+            global_input_activations[
+                refill_batch_idx_start: refill_batch_idx_start + self.cfg["batch_size"]
+            ] = normal_activations[samples, torch.arange(self.cfg["batch_size"])]
+
+        sample_indices = torch.multinomial(
+            global_loss_increases / global_loss_increases.sum(),
+            len(indices), 
+            replacement=False,
         )
-
-        # Sample len(indices) number of indices
-        # TODO check we aren't sampling the same point several times, that sounds bad
-        samples = probability_distribution.sample((indices.shape[0],))
-        resampled_neuron_outs = resample_mlp_post_acts[samples]
 
         # Replace W_dec with normalized versions of these
         self.W_dec.data[indices, :] = (
             (
-                resampled_neuron_outs
-                / torch.norm(resampled_neuron_outs, dim=1, keepdim=True)
+                global_input_activations[sample_indices]
+                / torch.norm(global_input_activations[sample_indices], dim=1, keepdim=True)
             )
             .to(self.dtype)
             .to(self.device)
@@ -210,16 +227,16 @@ class SAE(HookedRootModule):
         # Set W_enc equal to W_dec.T in these indices, first
         self.W_enc.data[:, indices] = self.W_dec.data[indices, :].T
 
-        # Then, change norms to be equal to 0.2 times the average norm of all the other columns, if other columns exist
+        # Then, change norms to be equal to a factor (0.2 in Anthropic) times the average norm of all the other columns, if other columns exist
         if indices.shape[0] < self.d_sae:
             sum_of_all_norms = torch.norm(self.W_enc.data, dim=0).sum()
             sum_of_all_norms -= len(indices)
             average_norm = sum_of_all_norms / (self.d_sae - len(indices))
-            self.W_enc.data[:, indices] *= 0.2 * average_norm
+            metrics["average_norm"] = average_norm.item()
+            self.W_enc.data[:, indices] *= self.cfg["resample_factor"] * average_norm
 
         else:
             self.W_enc.data[:, indices] *= 0.2
-
 
     @torch.no_grad()
     def resample_neurons(
@@ -230,6 +247,7 @@ class SAE(HookedRootModule):
         dataset=None,
         sae=None,
         lm=None,
+        metrics=None,
     ):
         """Do Resampling"""
 
@@ -242,7 +260,7 @@ class SAE(HookedRootModule):
             self.reinit_neurons(indices=indices, opt=opt)
         elif self.cfg["resample_mode"] == "anthropic":
             # Anthropic resampling
-            self.anthropic_resample(indices=indices, opt=opt, lm=lm, dataset=dataset)
+            self.anthropic_resample(indices=indices, opt=opt, lm=lm, dataset=dataset, metrics=metrics)
 
             # unnormalized_probability_distribution = torch.nn.functional.relu(
             #     resample_sae_loss_increases
