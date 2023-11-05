@@ -254,6 +254,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_warmup_epochs": 100*20,
         "sched_finish": True,
         "reinit_factor": 0.2,
+        "log_everything": False,
     }
 
     for k, v in kwargs.items():

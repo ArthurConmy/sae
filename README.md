@@ -1,11 +1,14 @@
 Coding up an SAE for a 1L model.
 
 <h2> Next steps: </h2>
-
 <b> The goal is to get L0 closer to 10-20 rather than ~200 :-( !!! </b>
 
 Currently we have a good sweep of stuff, remember that Neel got low 100s L0 so maybe 100 is fine? We also have Anthropic A/1 replication on the way, too.
-Best: 186 L0 and 90% loss recovered (but there's lots of optimization to do ... )
+Best: 137 L0 and 90% loss recovered; https://wandb.ai/arthurconmy/sae/runs/6i5td0kj
+
+TODO: 
+
+Look into bug where a lot looks to be resampled, despite firing frequencies telling a different story
 
 Other ideas:
 
