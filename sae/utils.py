@@ -236,11 +236,11 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "save_state_dict_every": lambda step: step%37123 == 1, # So still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
+        "anthropic_resample_batches": 20_000, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough
         "resample_reinit_factor": 0.05,
         "resample_sae_neurons_every": 30_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
         "resample_sae_neurons_at": [150*20, 300*20],
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
-        "resample_sae_neurons_batches_covered": 10, # How many batches to cover before resampling
         "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)

@@ -85,6 +85,12 @@ sae_batch_size = cfg["batch_size"] * cfg["seq_len"]
 if cfg["buffer_size"] is not None:
     assert sae_batch_size <= cfg["buffer_size"], f"SAE batch size {sae_batch_size} is larger than buffer size {cfg['buffer_size']}"
 
+if (cfg["resample_mode"] == "anthropic") != (cfg["anthropic_resample_batches"] is not None):
+    raise ValueError(f'We resample anthropically iff we have anthropic_resample_batches')
+
+if cfg["resample_mode"] == "anthropic":
+    assert cfg["anthropic_resample_batches"] % cfg["batch_size"] == 0, f"anthropic_resample_batches {cfg['anthropic_resample_batches']} must be divisible by batch_size {cfg['batch_size']}"
+
 def resample_at_step_idx(step_idx) -> bool:
     return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
 
