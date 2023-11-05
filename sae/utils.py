@@ -37,7 +37,7 @@ def loss_fn(
 ):
     # Note L1 is summed, L2 is meaned here. Should be the most appropriate when comparing losses across different LM size
     reconstruction_loss = torch.pow((sae_reconstruction-ground_truth), 2).mean(dim=(0, 1)) 
-    reconstruction_l1 = torch.abs(sae_reconstruction).sum(dim=1).mean(dim=(0,))
+    reconstruction_l1 = torch.abs(sae_hiddens).sum(dim=1).mean(dim=(0,))
     avg_num_firing = (sae_hiddens > 0).float().sum(dim=1).mean(dim=(0,)) # On a given token, how many neurons fired?
     did_fire = (sae_hiddens > 0).long().sum(dim=0).cpu() # How many times did each neuron fire?
 
