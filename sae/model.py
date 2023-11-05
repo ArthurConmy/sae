@@ -101,15 +101,7 @@ class SAE(HookedRootModule):
                 fwd_hooks=[
                     (
                         self.cfg["act_name"],
-                        lambda activation, hook: einops.rearrange(
-                            self.forward(
-                                einops.rearrange(
-                                    activation, "batch seq d_in -> (batch seq) d_in"
-                                )
-                            )[0],
-                            "(batch seq) d_in -> batch seq d_in",
-                            batch=test_tokens.shape[0],
-                        ),
+                        lambda activation, hook: self.forward(activation, return_mode="sae_out"),
                     )
                 ],
             )
@@ -184,16 +176,17 @@ class SAE(HookedRootModule):
                 cache.append(activation)
                 return self.forward(activation, return_mode="sae_out")
 
-            normal_loss, normal_activations = lm.run_with_cache(
+            normal_loss, normal_activations_cache = lm.run_with_cache(
                 refill_batch_tokens,
                 names_filter=self.cfg["act_name"],
                 return_type = "loss",
                 loss_per_token = True,
             )
+            normal_activations = normal_activations_cache[self.cfg["act_name"]]
 
             changes_in_loss = sae_loss - normal_loss
             changes_in_loss_dist = Categorical(
-                torch.nn.functional.relu(changes_in_loss) / torch.nn.functional.relu(changes_in_loss).sum(dim=1)
+                torch.nn.functional.relu(changes_in_loss) / torch.nn.functional.relu(changes_in_loss).sum(dim=1, keepdim=True)
             )
             samples = changes_in_loss_dist.sample()
             assert samples.shape == (self.cfg["batch_size"],), f"{samples.shape=}; {self.cfg['batch_size']=}"

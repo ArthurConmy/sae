@@ -169,7 +169,7 @@ def get_batch_tokens(
         pbar.n = batch_tokens.shape[0]
         pbar.refresh()
     
-    return batch_tokens
+    return batch_tokens[:batch_size]
 
 @torch.autocast("cuda", torch.bfloat16)
 @torch.no_grad()
@@ -236,10 +236,10 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "save_state_dict_every": lambda step: step%37123 == 1, # So still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
-        "anthropic_resample_batches": 20_000, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough
+        "anthropic_resample_batches": 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
         "resample_resample_factor": 0.05,
-        "resample_sae_neurons_every": 30_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
-        "resample_sae_neurons_at": [150*20, 300*20],
+        "resample_sae_neurons_every": 30_000 // 100, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
+        "resample_sae_neurons_at": [150*20 // 100, 300*20 // 100],
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
         "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
@@ -249,13 +249,13 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
         "sched_type": "cosine_annealing", # Mark as None if not using 
-        "sched_epochs": 100*20, # Think that's right???
+        "sched_epochs": 100*20 // 100, # Think that's right???
         "sched_lr_factor": 0.1,
-        "sched_warmup_epochs": 100*20,
+        "sched_warmup_epochs": 100*20 // 100,
         "sched_finish": True,
         "resample_factor": 0.2,
         "log_everything": False,
-        "anthropic_resample_last": 1200,
+        "anthropic_resample_last": 1200 // 100,
     }
 
     for k, v in kwargs.items():
