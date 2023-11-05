@@ -114,48 +114,51 @@ class SAE(HookedRootModule):
 
         return test_loss
 
+    def reinit_neurons(
+        self,
+        indices,
+        opt,
+    ):
+        new_W_enc = torch.nn.init.kaiming_uniform_(
+            torch.empty(
+                self.d_in, indices.shape[0], dtype=self.dtype, device=self.device
+            )
+        ) * self.cfg["reinit_factor"]
+        new_b_enc = torch.zeros(
+            indices.shape[0], dtype=self.dtype, device=self.device
+        )
+        new_W_dec = torch.nn.init.kaiming_uniform_(
+            torch.empty(
+                indices.shape[0], self.d_in, dtype=self.dtype, device=self.device
+            )
+        )
+        self.W_enc.data[:, indices] = new_W_enc
+        self.b_enc.data[indices] = new_b_enc
+        self.W_dec.data[indices, :] = new_W_dec
+        self.W_dec /= torch.norm(self.W_dec, dim=1, keepdim=True)
+
     @torch.no_grad()
     def resample_neurons(
         self,
         indices,
+        sched,
         opt,
-        resample_sae_loss_increases,
-        resample_mlp_post_acts,
-        reinit_factor=0.2,
-        mode="anthropic",
+        dataset,
+        sae,
+        lm,
     ):
-        """Do Anthropic-style resampling.
-
-        TODO document and implement better. This is really messy!!! :("""
+        """Do Resampling"""
 
         if len(indices.shape) != 1 or indices.shape[0] == 0:
             raise ValueError(
                 f"indices must be a non-empty 1D tensor but was {indices.shape}"
             )
 
-        if mode == "reinit":
-            new_W_enc = torch.nn.init.kaiming_uniform_(
-                torch.empty(
-                    self.d_in, indices.shape[0], dtype=self.dtype, device=self.device
-                )
-            ) * reinit_factor
-            new_b_enc = torch.zeros(
-                indices.shape[0], dtype=self.dtype, device=self.device
-            )
-            new_W_dec = torch.nn.init.kaiming_uniform_(
-                torch.empty(
-                    indices.shape[0], self.d_in, dtype=self.dtype, device=self.device
-                )
-            )
-
-            self.W_enc.data[:, indices] = new_W_enc
-            self.b_enc.data[indices] = new_b_enc
-
-            self.W_dec.data[indices, :] = new_W_dec
-            self.W_dec /= torch.norm(self.W_dec, dim=1, keepdim=True)
+        if self.cfg["resample_mode"] == "reinit":
+            self.reinit_neurons(indices=indices, opt=opt)
 
         else:
-            # Sample len(indices) number of indices from resample_sae_loss_increases proportio
+            # Sample len(indices) number of indices from resample_SAE_loss_increases proportion
             unnormalized_probability_distribution = torch.nn.functional.relu(
                 resample_sae_loss_increases
             )
@@ -224,6 +227,8 @@ class SAE(HookedRootModule):
                         print(
                             "Warning: it does not seem as if resetting the Adam parameters worked"
                         )
+
+        # TODO: adjust/reset learning rate properly
 
     def load_from_neels(self, version: int = 1):
         neel_cfg, state_dict = get_neel_model(version)

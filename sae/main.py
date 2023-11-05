@@ -48,27 +48,7 @@ lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 
 #%%
 
-# # Neel's config # Better: LOAD from HF
-# default_cfg = {
-#     "seed": 49,
-#     "batch_size": 4096,
-#     "buffer_mult": 384,
-#     "lr": 1e-4,
-#     "num_tokens": int(2e9),
-#     "l1_coeff": 3e-4,
-#     "beta1": 0.9,
-#     "beta2": 0.99,
-#     "dict_mult": 8,
-#     "seq_len": 128,
-#     "d_mlp": 2048,
-#     "enc_dtype":"fp32",
-#     "remove_rare_dir": False,
-# }
-# cfg = arg_parse_update_cfg(default_cfg)
-# cfg["model_batch_size"] = cfg["batch_size"] // cfg["seq_len"] * 16
-# cfg["buffer_size"] = cfg["batch_size"] * cfg["buffer_mult"]
-# cfg["buffer_batches"] = cfg["buffer_size"] // cfg["seq_len"]
-# pprint.pprint(cfg)
+# # Neel's config # See https://huggingface.co/NeelNanda/sparse_autoencoder/blob/main/47_cfg.json
 
 cfg = get_cfg(d_in = lm.cfg.d_mlp)
 
@@ -105,6 +85,9 @@ sae_batch_size = cfg["batch_size"] * cfg["seq_len"]
 if cfg["buffer_size"] is not None:
     assert sae_batch_size <= cfg["buffer_size"], f"SAE batch size {sae_batch_size} is larger than buffer size {cfg['buffer_size']}"
 
+def resample_at_step_idx(step_idx) -> bool:
+    return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
+
 # %%
 
 torch.random.manual_seed(cfg["seed"])
@@ -115,13 +98,11 @@ dummy_sae = SAE(cfg) # For now, just keep same dimension
 # Get some C4 or other data from HF
 raw_all_data = iter(load_dataset(cfg["dataset"], *(cfg["dataset_args"] or []), **(cfg["dataset_kwargs"] or {})))
 
-print(cfg["resample_sae_neurons_at"], type(cfg["resample_sae_neurons_at"]), "Yeah")
-
 #%%
 
 wandb_notes = ""
 
-try: 
+try:
     with open(__file__, "r") as f:
         wandb_notes += f.read()
 except Exception as e:
@@ -151,15 +132,23 @@ if sched is not None:
 #%%
 
 start_time = time.time()
+save_weights_failed = False
 
 # def my_profiling():
 if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
-
     if cfg["activation_training_order"] == "shuffled":
         buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().to(cfg["buffer_device"])
         # Hopefully ~800 million elements doesn't blow up CPU
 
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
+
+    # Check that our Anthropic resampling is even possible
+    if cfg["resample_mode"] == "anthropic":        
+        resample_indices = [idx for idx in range(10_000_000) if resample_at_step_idx(idx)]
+        resample_index_gaps = [resample_indices[i+1] - resample_indices[i] for i in range(len(resample_indices)-1)]
+        assert all([resample_index_gap >= cfg["anthropic_resample_last"] for resample_index_gap in resample_index_gaps]), f"Anthropic resampling is not possible with {cfg['anthropic_resample_last']}"
+        # Hmm this may be annoying when we want to resample quickly at the start, but not then later
+
     last_test_every = -1
     prelosses = []
     
@@ -169,6 +158,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
     )
     if cfg["testing"]:
         step_iterator = tqdm(step_iterator, desc="Step")
+
     for step_idx in step_iterator:
         # Note that we use Step 0 to make a "test set" 
 
@@ -181,10 +171,14 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 batch_size=cfg["batch_size"] if step_idx > 0 else cfg["test_set_batch_size"],
             )
 
+            refill_buffer = False
+
         else:
             assert cfg["activation_training_order"] == "shuffled", cfg["activation_training_order"]
+            
+            refill_buffer = buffer.shape[0] <= sae_batch_size or resample_at_step_idx(step_idx)
 
-            if buffer.shape[0] <= sae_batch_size:
+            if refill_buffer: # Use whole buffer for our new resampling technique
                 # If we have less than half the buffer size, 
                 # Generate enough new tokens to fill the buffer
                 batch_tokens = get_batch_tokens(
@@ -205,13 +199,14 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
 
         else:
-            if buffer.shape[0] <= sae_batch_size:
-                print(time.time()-start_time)
+            if refill_buffer:
+                print("Refilling buffer; time elapsed", time.time()-start_time, "...")
                 if cfg["testing"] and step_idx > 100:
                     raise Exception("We have finished iterating")
                     # return
 
                 # We need to refill the buffer
+                # We do a similar thing when Anthropic resampling
                 refill_iterator = range(0, batch_tokens.shape[0], cfg["batch_size"])
                 total_size = len(refill_iterator) * cfg["batch_size"] * cfg["seq_len"] + buffer.shape[0]
                 if cfg["testing"]:
@@ -240,6 +235,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
                 # Shuffle buffer
                 buffer = buffer[torch.randperm(buffer.shape[0])]
+                print("... done.")
 
             # Pop off the end of the buffer
             mlp_post_acts = buffer[-sae_batch_size:].to(cfg["device"])
@@ -274,38 +270,55 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens).item()
             metrics["loss_recovered"] = (prelosses[1]-metrics["test_loss_with_sae"])/(prelosses[1]-prelosses[0])
         
-        if cfg["save_state_dict_every"](step_idx):
-            # First save the state dict to weights/
-            fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
-            torch.save(sae.state_dict(), fname)
-
+        if cfg["save_state_dict_every"](step_idx) or save_weights_failed:
+            # Remove file
+            # Kinda sketch...
             if cfg["delete_cache"]:
                 try:
-                    subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # TODO still seems to break later syncing, sad, fix this
+                    subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # Using delete_cache=True for just one process fixes this right?
+                    subprocess.run("rm -rf /root/sae/weights/*.pt", shell=True)
                 except Exception as e:
                     print("Couldn't cache clear: " + str(e))
-            
-            # Log the last weights to wandb
-            # Save as wandb artifact
-            artifact = wandb.Artifact(
-                name=f"weights_{run_name}",
-                type="weights",
-                description="Weights for SAE",
-            )
-            artifact.add_file(fname)
-            wandb.log_artifact(artifact)
-            artifact.wait()
 
-            # Remove file
-            # Kinda sketch
+            # Then save the state dict to weights/
+            try:
+                fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
+                torch.save(sae.state_dict(), fname)
+                
+                # Log the last weights to wandb
+                # Save as wandb artifact
+                artifact = wandb.Artifact(
+                    name=f"weights_{run_name}",
+                    type="weights",
+                    description="Weights for SAE",
+                )
+                artifact.add_file(fname)
+                wandb.log_artifact(artifact)
+                artifact.wait()
+            except Exception as e:
+                print("!!! warning, could not save weights" + str(e))
+            else:
+                save_weights_failed=False
         
-        if step_idx % cfg["resample_sae_neurons_every"] == 0 or step_idx in cfg["resample_sae_neurons_at"]:
+        if resample_at_step_idx(step_idx):
             # And figure out how frequently all the features fire
             # And then actually resample those neurons
 
             # Now compute dead neurons
             current_frequency_counter = running_frequency_counter.float() / (sae_batch_size * (step_idx - last_test_every)) # TODO implement exactly the Anthropic thing
+
+            if cfg["resample_mode"] == "anthropic":
+                # Get things that didn't fire
+                indices = (running_frequency_counter == 0).nonzero(as_tuple=False)[:, 0]
+            elif cfg["resample_mode"] == "reinit":        
+                # Get indices of neurons with frequency < reset_cutoff
+                indices = (current_frequency_counter < cfg["resample_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
+            else:
+                raise ValueError(f"Unknown resample_mode {cfg['resample_mode']}")
+
             last_test_every = step_idx
+            # Reset the counter
+            running_frequency_counter = torch.zeros_like(running_frequency_counter)
 
             fig = hist(
                 [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
@@ -320,51 +333,17 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             )
             metrics["frequency_histogram"] = fig
         
-            # Reset the counter
-            running_frequency_counter = torch.zeros_like(running_frequency_counter)
+            if indices.numel() > 0:
+                # If there are any neurons we should resample, do it
+                sae.resample_neurons(indices=indices, sched=sched, dataset=raw_all_data, opt=opt, sae=sae, lm=lm)
 
-            # Get indices of neurons with frequency < reset_cutoff
-            indices = (current_frequency_counter < cfg["resample_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
             metrics["num_neurons_resampled"] = indices.numel()
 
-            resample_sae_loss_increases = torch.FloatTensor(size=(0,)).float()
-            resample_mlp_post_acts = torch.FloatTensor(size=(0, cfg["d_in"])).float().cpu() # Hopefully ~800 million elements doesn't blow up CPU 
-
-            # Sample tons more data and save the directions here
-
-            if cfg["resample_mode"] == "anthropic":
-                # TODO this is a bit of a mess
-                for resample_batch_idx in range(cfg["resample_sae_neurons_batches_covered"]):
-                    resample_batch_tokens = get_batch_tokens(
-                        lm=lm,
-                        dataset=raw_all_data,
-                        seq_len=cfg["seq_len"],
-                        batch_size=cfg["batch_size"],
-                    )
-                    sae_loss = sae.get_test_loss(lm=lm, test_tokens=resample_batch_tokens)
-
-                    with torch.no_grad():
-                        # TODO fold this into the forward pass in get_test_loss, we don't need two forward passes
-                        with torch.autocast("cuda", torch.bfloat16):    
-                            model_logits, activation_cache = lm.run_with_cache(
-                                resample_batch_tokens,
-                                names_filter=cfg["act_name"],
-                            )
-                            mlp_post_acts = activation_cache[cfg["act_name"]].reshape(-1, cfg["d_in"])
-                            model_logprobs = torch.nn.functional.log_softmax(model_logits, dim=-1)
-                            model_loss = -model_logprobs[torch.arange(model_logprobs.shape[0])[:, None], torch.arange(model_logprobs.shape[1]-1)[None], resample_batch_tokens[:, 1:]].flatten()
-
-                            resample_sae_loss_increases = torch.cat((resample_sae_loss_increases, (sae_loss - model_loss).cpu()), dim=0)
-                            resample_mlp_post_acts = torch.cat((resample_mlp_post_acts, mlp_post_acts.cpu()), dim=0)
-
-            if indices.numel() > 0:
-                # If there are any neurons we should resample, do this
-                sae.resample_neurons(indices, opt, resample_sae_loss_increases, resample_mlp_post_acts, mode=cfg["resample_mode"], reinit_factor=cfg["resample_reinit_factor"])
+        if resample_at_step_idx(step_idx + cfg["anthropic_resample_last"]):
+            running_frequency_counter = torch.zeros_like(running_frequency_counter)
 
         metrics["step_idx"] = step_idx
-
-        wandb.log(metrics if cfg["log_everything"] or len(metrics) != 9 or step_idx % 20 == 0 else {})
-
+        wandb.log(metrics if len(metrics) != 9 or step_idx % 20 == 0 else {})
         if step_idx == 7 and len(metrics) != 9: # Something random
             print("*"*100)
             print(f"NOOOOOOOOOOOOOOOOOOOOOOOOOOO! You messed this up, len(metrics) changed to {len(metrics)}")
@@ -447,7 +426,6 @@ def process_token(s: Any):
     s = s.replace("\n", NEWLINE+"\n")
     s = s.replace("\t", TAB)
     return s
-
 
 def process_tokens(l):
     if isinstance(l, str):
