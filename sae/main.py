@@ -363,8 +363,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         metrics["step_idx"] = step_idx
 
-        if len(metrics) != 9 or step_idx % 20 == 0: # Less frequent logging
-            wandb.log(metrics)
+        wandb.log(metrics if len(metrics) != 9 or step_idx % 20 == 0 else {})
 
         if step_idx == 7 and len(metrics) != 9: # Something random
             print("*"*100)

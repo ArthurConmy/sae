@@ -235,7 +235,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "test_every": 100,
         "save_state_dict_every": lambda step: step%37123 == 1, # So still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
-        "resample_mode": "reinit", # Either "reinit" or "Anthropic"
+        "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
+        "resample_reinit_factor": 0.05,
         "resample_sae_neurons_every": 30_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
         "resample_sae_neurons_at": [150*20, 300*20],
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
