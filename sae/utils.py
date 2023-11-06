@@ -84,7 +84,7 @@ def train_step(
         )
 
     opt.step()
-    if sched is not None and (not cfg["sched_finish"] or step_idx < cfg["sched_epochs"]):
+    if sched is not None and (not cfg["sched_finish"] or step_idx < cfg["sched_epochs"] or sched.get_last_lr()[0]+1e-9 < cfg["lr"]): # By default, return low LRs after resampling to normal conditions again
         sched.step()
 
     metrics["lr"] = opt.param_groups[0]["lr"]
@@ -129,7 +129,8 @@ def get_batch_tokens(
     current_batch = []
     current_length = 0
 
-    pbar = tqdm(total=batch_size, desc="Filling batches")
+    if use_tqdm:
+        pbar = tqdm(total=batch_size, desc="Filling batches")
     
     while batch_tokens.shape[0] < batch_size:
         s = next(dataset)["text"]
@@ -165,9 +166,10 @@ def get_batch_tokens(
                 batch_tokens = torch.cat((batch_tokens, full_batch.unsqueeze(0)), dim=0)
                 current_batch = []
                 current_length = 0
-    
-        pbar.n = batch_tokens.shape[0]
-        pbar.refresh()
+
+        if use_tqdm:    
+            pbar.n = batch_tokens.shape[0]
+            pbar.refresh()
     
     return batch_tokens[:batch_size]
 
@@ -233,13 +235,13 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "test_set_batch_size": 100, # 20 Sequences
         "wandb_mode_online_override": False, # Even if in testing, wandb online anyways
         "test_every": 100,
-        "save_state_dict_every": lambda step: step%37123 == 1, # So still saves immediately. Plus doesn't interfere with resampling (very often)
+        "save_state_dict_every": lambda step: step%37123 == 1, # Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
-        "anthropic_resample_batches": 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
+        "anthropic_resample_batches": 32_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
         "resample_resample_factor": 0.05,
-        "resample_sae_neurons_every": 30_000 // 100, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
-        "resample_sae_neurons_at": [150*20 // 100, 300*20 // 100],
+        "resample_sae_neurons_every": 50_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
+        "resample_sae_neurons_at": [150*20, 300*20],
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
         "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
@@ -249,13 +251,13 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
         "sched_type": "cosine_annealing", # Mark as None if not using 
-        "sched_epochs": 100*20 // 100, # Think that's right???
-        "sched_lr_factor": 0.1,
-        "sched_warmup_epochs": 100*20 // 100,
+        "sched_epochs": 50*20, # Think that's right???
+        "sched_lr_factor": 0.1, # This seems to help a little. But not THAT much, so tone down
+        "sched_warmup_epochs": 50*20,
         "sched_finish": True,
-        "resample_factor": 0.2,
+        "resample_factor": 0.01,
         "log_everything": False,
-        "anthropic_resample_last": 1200 // 100,
+        "anthropic_resample_last": 2000, # Really timesed by cfg["batch_size"]...
     }
 
     for k, v in kwargs.items():

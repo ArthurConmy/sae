@@ -9,6 +9,9 @@ import einops
 from transformer_lens.hook_points import HookedRootModule, HookPoint
 from torch.distributions.multinomial import Categorical
 
+ENTITY = "ArthurConmy"
+PROJECT = "sae"
+
 class SAE(HookedRootModule):
     def __init__(
         self,
@@ -151,8 +154,7 @@ class SAE(HookedRootModule):
     ):
         anthropic_iterator = range(0, self.cfg["anthropic_resample_batches"], self.cfg["batch_size"])
         total_size = len(anthropic_iterator) * self.cfg["batch_size"] * self.cfg["seq_len"]
-        if self.cfg["testing"]:
-            anthropic_iterator = tqdm(anthropic_iterator, desc="Refill")
+        anthropic_iterator = tqdm(anthropic_iterator, desc="Anthropic loss calculating")
         global_loss_increases = torch.zeros((self.cfg["anthropic_resample_batches"],), dtype=self.dtype, device=self.device)
         global_input_activations = torch.zeros((self.cfg["anthropic_resample_batches"], self.d_in), dtype=self.dtype, device=self.device)
 
@@ -196,7 +198,7 @@ class SAE(HookedRootModule):
             ] = changes_in_loss[torch.arange(self.cfg["batch_size"]), samples]
             global_input_activations[
                 refill_batch_idx_start: refill_batch_idx_start + self.cfg["batch_size"]
-            ] = normal_activations[samples, torch.arange(self.cfg["batch_size"])]
+            ] = normal_activations[torch.arange(self.cfg["batch_size"]), samples]
 
         sample_indices = torch.multinomial(
             global_loss_increases / global_loss_increases.sum(),
@@ -287,7 +289,15 @@ class SAE(HookedRootModule):
                             "Warning: it does not seem as if resetting the Adam parameters worked"
                         )
 
-        # TODO: adjust/reset learning rate properly
+        if sched is not None:
+            # Keep on stepping till we're cfg["lr"] * cfg["sched_lr_factor"]
+
+            max_iters = 10**7
+            while sched.get_last_lr()[0] > self.cfg["lr"] * self.cfg["sched_lr_factor"] + 1e-9:
+                sched.step()
+                max_iters -= 1
+                if max_iters == 0:
+                    raise ValueError("Too many iterations -- sched is messed up")
 
     def load_from_neels(self, version: int = 1):
         neel_cfg, state_dict = get_neel_model(version)
@@ -298,23 +308,33 @@ class SAE(HookedRootModule):
         )
         self.load_state_dict(state_dict=state_dict)
 
-    @classmethod
-    def get_config(self, run_id: str):
-        entity="ArthurConmy" # Could DRY more; make these classattributes or somethign
-        project="sae"
+    def get_config(
+        self,
+        run_id: str,
+    ):
         api = wandb.Api()
-        run = api.run(f"{entity}/{project}/{run_id}")
-        return run.config
+        run = api.run(f"{ENTITY}/{PROJECT}/{run_id}")
+        return run.config    
 
-    def load_from_my_wandb(self, run_id: str, index_from_back_override=None):
-        entity="ArthurConmy"
-        project="sae"
+    def load_from_my_wandb(
+        self, 
+        run_id: str, 
+        index_from_back_override = None,
+        index_from_front_override = None,
+    ):
+        if index_from_back_override is not None and index_from_front_override is not None:
+            raise ValueError(f"Can't have both {index_from_back_override=} and {index_from_front_override=}")
+
         api = wandb.Api()
-        run = api.run(f"{entity}/{project}/{run_id}")
+        run = api.run(f"{ENTITY}/{PROJECT}/{run_id}")
 
         list_logged_artifacts = list(run.logged_artifacts())
         len_logged_arifacts = len(list_logged_artifacts)
-        for index in (range(len_logged_arifacts-1, -1, -1) if index_from_back_override is None else [-index_from_back_override]):
+
+        # Kinda cursed three way condition in one line
+        index_iterator = range(len_logged_arifacts-1, -1, -1) if index_from_back_override is None and index_from_front_override is None else [(int(index_from_front_override is not None)*2 - 1) * (index_from_back_override or index_from_front_override)]
+
+        for index in index_iterator:
             try:
                 logged_artifact = list_logged_artifacts[index] 
                 logged_artifact_dir = Path(logged_artifact.download())

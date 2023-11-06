@@ -90,6 +90,8 @@ if (cfg["resample_mode"] == "anthropic") != (cfg["anthropic_resample_batches"] i
 if cfg["resample_mode"] == "anthropic":
     assert cfg["anthropic_resample_batches"] % cfg["batch_size"] == 0, f"anthropic_resample_batches {cfg['anthropic_resample_batches']} must be divisible by batch_size {cfg['batch_size']}"
 
+    assert cfg["anthropic_resample_batches"] >= cfg["d_sae"], f"anthropic_resample_batches {cfg['anthropic_resample_batches']} must be greater than d_sae {cfg['d_sae']}"
+
 def resample_at_step_idx(step_idx) -> bool:
     return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
 
@@ -340,7 +342,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         
             if indices.numel() > 0:
                 # If there are any neurons we should resample, do it
-                sae.resample_neurons(indices=indices, sched=sched, dataset=raw_all_data, opt=opt, sae=sae, lm=lm)
+                sae.resample_neurons(indices=indices, sched=sched, dataset=raw_all_data, opt=opt, sae=sae, lm=lm, metrics=metrics)
 
             metrics["num_neurons_resampled"] = indices.numel()
 
@@ -361,11 +363,12 @@ neel_sae = deepcopy(sae)
 neel_sae.load_from_neels(1)
 
 # %%
-
+    
 # Load in my 300 L0 / 80% Loss Recovered
 sae.load_from_my_wandb(
-    run_id = "1fexfhi2",
-    index_from_back_override=3, # 1 did not work
+    run_id = "794ulknc",
+    # index_from_back_override=3, # 1 did not work
+    index_from_front_override=2,
 )
 
 #%%
@@ -497,13 +500,13 @@ MODE = "neel" # "old"
 
 if ipython is not None:
     # Now actually study the top neuron
-    # topk=1
-    # top_neuron_idx = losses.topk(topk)[1][topk-1].item()
+    topk=4
+    top_neuron_idx = losses.topk(topk+1)[1][-1].item()
 
-    for top_neuron_idx in range(-100, -200, -12): # = 7 #,  2395, 14983, 14163,
+    for top_neuron_idx in [top_neuron_idx]: # range(-100, -200, -12): # = 7 #,  2395, 14983, 14163,
         if MODE == "neel":
             prop=hidden_acts["hook_hidden_post"][:, :, top_neuron_idx].gt(0).float().mean().item()
-            if prop < 0.000001: continue 
+            if prop < 0.000000001: continue 
             print("Neuron", top_neuron_idx, "fired on avg", hidden_acts["hook_hidden_post"][:, :, top_neuron_idx].mean().item(), "and proportion", prop)
             token_df = make_token_df(batch_tokens[:500])
             token_df["feature"] = utils.to_numpy(hidden_acts["hook_hidden_post"][:, :, top_neuron_idx].flatten())
