@@ -47,24 +47,24 @@ def loss_fn(
     reconstruction_loss = torch.pow((sae_reconstruction-ground_truth), 2).mean(dim=(0, 1)) 
 
     if cfg["l1_loss_form"] == "l1":
-        sparsity_loss = torch.abs(sae_hiddens).sum(dim=1).mean(dim=(0,))
+        sparsity = torch.abs(sae_hiddens).sum(dim=1).mean(dim=(0,))
     elif cfg["l1_loss_form"] == "hoyer":
-        sparsity_loss = hoyer_square(sae_hiddens).mean(dim=(0,))
+        sparsity = hoyer_square(sae_hiddens).mean(dim=(0,))
     else:
         raise ValueError(f"Unknown l1_loss_form {cfg['l1_loss_form']}")
 
     avg_num_firing = (sae_hiddens > 0).float().sum(dim=1).mean(dim=(0,)) # On a given token, how many neurons fired?
     did_fire = (sae_hiddens > 0).long().sum(dim=0).cpu() # How many times did each neuron fire?
 
-    l1_loss = cfg["l1_lambda"] * sparsity_loss
-    loss = reconstruction_loss + l1_loss
+    sparsity_loss = cfg["l1_lambda"] * sparsity
+    loss = reconstruction_loss + sparsity_loss
     
     return {
         "loss": loss,
         "loss_logged": loss.item(),
         "reconstruction_loss_logged": reconstruction_loss.item(),
-        "l1_loss_logged": l1_loss.item(),
-        "reconstruction_l1_logged": sparsity_loss.item(),
+        "sparsity": sparsity.item(),
+        "sparsity_loss": sparsity_loss.item(),
         "avg_num_firing_logged": avg_num_firing.item(),
         "did_fire_logged": did_fire,
     }
@@ -237,8 +237,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "seq_len": 128,  # Length of each input sequence for the model
         "d_in": None,  # Input dimension for the encoder model
         "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-        "lr": 0.000077,  # This is low because Neel uses L2, and I think we should use mean squared error
-        "l1_lambda": 0.0002,
+        "lr": 0.000055,  # This is low because Neel uses L2, and I think we should use mean squared error
+        "l1_lambda": 0.00077,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
         "dataset_kwargs": {"split": "train", "streaming": True}, 
@@ -253,10 +253,10 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "save_state_dict_every": lambda step: step%37123 == 1, # Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
-        "anthropic_resample_batches": 32_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
+        "anthropic_resample_batches": 32768, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
         "resample_resample_factor": 0.05,
-        "resample_sae_neurons_every": 50_000, # Neel uses 30_000 but we want to move a bit faster. Plus doing lots of resamples early seems great. NOTE: the [500, 2000] seems crucial for a sudden jump in performance, I don't know why!
-        "resample_sae_neurons_at": [150*20, 300*20],
+        "resample_sae_neurons_every": 2050427598475984347529875,
+        "resample_sae_neurons_at": torch.arange(25_000, 125_000, 25_000).tolist(),
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
         "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),

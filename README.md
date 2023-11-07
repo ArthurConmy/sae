@@ -52,3 +52,7 @@ Fourth (2479) was not interpretable
 Fifth (581) was interpretable (commas)
 
 We sampled neuron 0-19 inclusive. 5.5/8 were interpretable. 12 didn't fire on more than 3 of our 500*128 tokens so were ignored. In the same process for Neel's 5/9 were interpretable.
+
+# Help
+
+`pip install -e .` is 
