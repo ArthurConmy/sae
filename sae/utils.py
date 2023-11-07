@@ -29,19 +29,34 @@ from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callab
 from torch.utils.data import Dataset
 from transformer_lens import utils
 
+def hoyer_square(z: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    """Hoyer-Square sparsity measure."""
+    eps = torch.finfo(z.dtype).eps
+
+    numer = z.norm(p=1, dim=dim)
+    denom = z.norm(p=2, dim=dim)
+    return numer.div(denom + eps).square()
+
 def loss_fn(
     sae_reconstruction,
     sae_hiddens,
     ground_truth,
-    l1_lambda,
+    cfg,
 ):
     # Note L1 is summed, L2 is meaned here. Should be the most appropriate when comparing losses across different LM size
     reconstruction_loss = torch.pow((sae_reconstruction-ground_truth), 2).mean(dim=(0, 1)) 
-    reconstruction_l1 = torch.abs(sae_hiddens).sum(dim=1).mean(dim=(0,))
+
+    if cfg["l1_loss_form"] == "l1":
+        sparsity_loss = torch.abs(sae_hiddens).sum(dim=1).mean(dim=(0,))
+    elif cfg["l1_loss_form"] == "hoyer":
+        sparsity_loss = hoyer_square(sae_hiddens).mean(dim=(0,))
+    else:
+        raise ValueError(f"Unknown l1_loss_form {cfg['l1_loss_form']}")
+
     avg_num_firing = (sae_hiddens > 0).float().sum(dim=1).mean(dim=(0,)) # On a given token, how many neurons fired?
     did_fire = (sae_hiddens > 0).long().sum(dim=0).cpu() # How many times did each neuron fire?
 
-    l1_loss = l1_lambda * reconstruction_l1
+    l1_loss = cfg["l1_lambda"] * sparsity_loss
     loss = reconstruction_loss + l1_loss
     
     return {
@@ -49,7 +64,7 @@ def loss_fn(
         "loss_logged": loss.item(),
         "reconstruction_loss_logged": reconstruction_loss.item(),
         "l1_loss_logged": l1_loss.item(),
-        "reconstruction_l1_logged": reconstruction_l1.item(),
+        "reconstruction_l1_logged": sparsity_loss.item(),
         "avg_num_firing_logged": avg_num_firing.item(),
         "did_fire_logged": did_fire,
     }
@@ -66,7 +81,7 @@ def train_step(
     opt.zero_grad()
     # TODO benchmark whether grad adjustment is expensive here
     
-    metrics = loss_fn(*sae(mini_batch), ground_truth=mini_batch, l1_lambda=cfg["l1_lambda"])
+    metrics = loss_fn(*sae(mini_batch), ground_truth=mini_batch, cfg=cfg)
     metrics["loss"].backward()
 
     # Update grads so that they remove the parallel component
@@ -106,7 +121,7 @@ def train_step(
         sae.W_dec.data /= (norms + 1e-6) # Eps for numerical stability I hope
 
     if test_data is not None:
-        test_loss_metrics = loss_fn(*sae(test_data), ground_truth=test_data, l1_lambda=cfg["l1_lambda"])
+        test_loss_metrics = loss_fn(*sae(test_data), ground_truth=test_data, cfg=cfg)
         test_loss_metrics = {f"test_{k}": v for k, v in test_loss_metrics.items()}
         metrics = {**metrics, **test_loss_metrics}
 
@@ -222,7 +237,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "seq_len": 128,  # Length of each input sequence for the model
         "d_in": None,  # Input dimension for the encoder model
         "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-        "lr": 0.01,  # This is low because Neel uses L2, and I think we should use mean squared error
+        "lr": 0.000077,  # This is low because Neel uses L2, and I think we should use mean squared error
         "l1_lambda": 0.0002,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
@@ -258,6 +273,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "resample_factor": 0.01,
         "log_everything": False,
         "anthropic_resample_last": 2000, # Really timesed by cfg["batch_size"]...
+        "l1_loss_form": "l1", # or "hoyer"
+        "l2_loss_form": "l2", # or "centred cosine sim"
     }
 
     for k, v in kwargs.items():
