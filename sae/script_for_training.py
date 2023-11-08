@@ -8,7 +8,7 @@ used = set()
 
 def run_script(threshold, gpu_id, keywords):
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = str(1)
+    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     args = ["python", os.path.expanduser("~/sae/sae/main.py")]
     for key, value in keywords.items():
         args.append(f"--{key}={value}")
