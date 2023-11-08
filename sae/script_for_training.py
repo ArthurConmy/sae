@@ -27,6 +27,8 @@ if __name__ == '__main__':
     for width in [2048, 16384, 16384*8]:
         for lr in [5.5 * 1e-5, 1e-5]:
             keyword_list.append({"d_sae": width, "lr": lr})
+            if width > 100_000:
+                keyword_list["buffer_size"] = 2**16
 
     for threshold_idx, keywords in enumerate(keyword_list):
         gpu_id = (threshold_idx // num_jobs_per_gpu) % num_gpus
