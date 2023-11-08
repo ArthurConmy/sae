@@ -276,10 +276,18 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
         running_frequency_counter += metrics["did_fire_logged"]
 
         if step_idx%cfg["test_every"]==0:
+
+            gc.collect()
+            torch.cuda.empty_cache()
+
             # Figure out the loss on the test prompts
             metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens).item()
             metrics["loss_recovered"] = (prelosses[1]-metrics["test_loss_with_sae"])/(prelosses[1]-prelosses[0])
-        
+
+            gc.collect()
+            torch.cuda.empty_cache()
+
+
         if cfg["save_state_dict_every"](step_idx) or save_weights_failed:
             # Remove file
             # Kinda sketch...

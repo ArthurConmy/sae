@@ -52,7 +52,7 @@ def loss_fn(
     else:
         raise ValueError(f"Unknown l1_loss_form {cfg['l1_loss_form']}")
 
-    avg_num_firing = (sae_hiddens > 0).float().sum(dim=1).mean(dim=(0,)) # On a given token, how many neurons fired?
+    avg_num_firing = (sae_hiddens > 0).to(cfg["dtype"]).sum(dim=1).mean(dim=(0,)) # On a given token, how many neurons fired?
     did_fire = (sae_hiddens > 0).long().sum(dim=0).cpu() # How many times did each neuron fire?
 
     sparsity_loss = cfg["l1_lambda"] * sparsity
@@ -232,8 +232,8 @@ def get_neel_model(version = 1):
 def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
     cur_dict = {
         "seed": 1, 
-        "batch_size": 32,  # Number of samples we pass through THE LM
-        "seq_len": 128,  # Length of each input sequence for the model
+        "batch_size": 32 // 2,  # Number of samples we pass through THE LM 
+        "seq_len": 128 // 2,  # Length of each input sequence for the model
         "d_in": 2048,  # Input dimension for the encoder model
         "d_sae": 16384 * 8,  # Dimensionality for the sparse autoencoder (SAE)
         "lr": 0.0001,  # This is low because Neel uses L2, and I think we should use mean squared error
@@ -249,7 +249,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "test_set_batch_size": 100, # 20 Sequences
         "wandb_mode_online_override": False, # Even if in testing, wandb online anyways
         "test_every": 100,
-        "save_state_dict_every": lambda step: step%3712323482348327498327 == 14324830248320, # Disabled currently; used Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
+        "save_state_dict_every": lambda step: step%19000 == 1, # Disabled currently; used Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
         "anthropic_resample_batches": 200_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
