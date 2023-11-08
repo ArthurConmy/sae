@@ -350,7 +350,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             running_frequency_counter = torch.zeros_like(running_frequency_counter)
 
         metrics["step_idx"] = step_idx
-        wandb.log(metrics if len(metrics) != 9 or step_idx % 20 == 0 else {})
+        wandb.log(metrics if len(metrics) != 9 or step_idx % 20 == 0 or step_idx < 2000 else {})
         if step_idx == 7 and len(metrics) != 9: # Something random
             print("*"*100)
             print(f"NOOOOOOOOOOOOOOOOOOOOOOOOOOO! You messed this up, len(metrics) changed to {len(metrics)}")
