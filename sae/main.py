@@ -43,7 +43,6 @@ from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, ge
 
 #%%
 
-lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l")
 
 #%%
 
@@ -94,6 +93,9 @@ if cfg["resample_mode"] == "anthropic":
 
 def resample_at_step_idx(step_idx) -> bool:
     return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
+
+lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l").to(cfg["dtype"])
+assert lm.cfg.d_mlp == cfg["d_in"], f"lm.cfg.d_mlp {lm.cfg.d_mlp} != cfg['d_in'] {cfg['d_in']}"
 
 # %%
 
@@ -312,7 +314,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # And then actually resample those neurons
 
             # Now compute dead neurons
-            current_frequency_counter = running_frequency_counter.float() / (sae_batch_size * (step_idx - last_test_every)) # TODO implement exactly the Anthropic thing
+            current_frequency_counter = running_frequency_counter.to(cfg["dtype"]) / (sae_batch_size * (step_idx - last_test_every)) # TODO implement exactly the Anthropic thing
 
             if cfg["resample_mode"] == "anthropic":
                 # Get things that didn't fire
@@ -328,7 +330,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             running_frequency_counter = torch.zeros_like(running_frequency_counter)
 
             fig = hist(
-                [torch.max(current_frequency_counter, torch.FloatTensor([1e-10])).log10().tolist()], # Make things -10 if they never appear
+                [torch.max(current_frequency_counter, torch.FloatTensor([1e-10]).to(current_frequency_counter.dtype)).log10().tolist()], # Make things -10 if they never appear
                 # Show proportion on y axis
                 histnorm="percent",
                 title = "Histogram of SAE Neuron Firing Frequency (Proportions of all Neurons)",

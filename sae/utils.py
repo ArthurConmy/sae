@@ -235,7 +235,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "seed": 1, 
         "batch_size": 32,  # Number of samples we pass through THE LM
         "seq_len": 128,  # Length of each input sequence for the model
-        "d_in": None,  # Input dimension for the encoder model
+        "d_in": 2048,  # Input dimension for the encoder model
         "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
         "lr": 0.000055,  # This is low because Neel uses L2, and I think we should use mean squared error
         "l1_lambda": 0.0012,
