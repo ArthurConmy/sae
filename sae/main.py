@@ -293,6 +293,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # Kinda sketch...
             if cfg["delete_cache"]:
                 try:
+                    # These seem to be working badly; use https://docs.wandb.ai/ref/cli/wandb-artifact/wandb-artifact-cache/wandb-artifact-cache-cleanup ???
                     subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # Using delete_cache=True for just one process fixes this right?
                     subprocess.run("rm -rf /workspace/sae/weights/**.pt", shell=True)
                     subprocess.run("rm -rf /root/.local/share/wandb/artifacts/staging/**", shell=True)
