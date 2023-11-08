@@ -238,7 +238,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "d_in": None,  # Input dimension for the encoder model
         "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
         "lr": 0.000055,  # This is low because Neel uses L2, and I think we should use mean squared error
-        "l1_lambda": 0.00077,
+        "l1_lambda": 0.0012,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
         "dataset_kwargs": {"split": "train", "streaming": True}, 
