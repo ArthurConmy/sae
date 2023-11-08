@@ -253,8 +253,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
         "anthropic_resample_batches": 200_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
-        "resample_sae_neurons_every": 2050427598475984347529875,
-        "resample_sae_neurons_at": torch.arange(25_000, 125_000, 25_000).tolist(),
+        "resample_sae_neurons_every": 205042759847598434752987523487239,
+        "resample_sae_neurons_at": [10_000, 20_000] + torch.arange(50_000, 125_000, 25_000).tolist(),
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
         "dtype": torch.bfloat16, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
@@ -270,7 +270,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_finish": True,
         "resample_factor": 0.01,
         "log_everything": False,
-        "anthropic_resample_last": 12_500, # Really timesed by cfg["batch_size"]...
+        "anthropic_resample_last": 7_500, # Really timesed by cfg["batch_size"]...
         "l1_loss_form": "l1", # or "hoyer"
         "l2_loss_form": "l2", # or "centred cosine sim"
     }
