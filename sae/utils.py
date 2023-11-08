@@ -257,10 +257,10 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "resample_sae_neurons_every": 2050427598475984347529875,
         "resample_sae_neurons_at": torch.arange(25_000, 125_000, 25_000).tolist(),
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
-        "dtype": torch.float32, 
+        "dtype": torch.bfloat16, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-        "buffer_size": 2**17, # Size of the buffer
+        "buffer_size": 2**16, # Size of the buffer
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
