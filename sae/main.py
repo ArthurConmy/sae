@@ -285,13 +285,13 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             if cfg["delete_cache"]:
                 try:
                     subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # Using delete_cache=True for just one process fixes this right?
-                    subprocess.run("rm -rf /root/sae/weights/*.pt", shell=True)
+                    subprocess.run("rm -rf /workspace/sae/weights/**.pt", shell=True)
                 except Exception as e:
                     print("Couldn't cache clear: " + str(e))
 
             # Then save the state dict to weights/
             try:
-                fname = os.path.expanduser(f'~/sae/weights/{run_name}.pt')
+                fname = os.path.expanduser(f'/workspace/sae/weights/{run_name}.pt')
                 torch.save(sae.state_dict(), fname)
                 
                 # Log the last weights to wandb
