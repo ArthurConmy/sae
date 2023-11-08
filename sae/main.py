@@ -144,7 +144,7 @@ save_weights_failed = False
 # def my_profiling():
 if True: # Usually we don't want to profile, so `if True` is better as it keeps things in scope
     if cfg["activation_training_order"] == "shuffled":
-        buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).float().to(cfg["buffer_device"])
+        buffer: Float[torch.Tensor, "sae_batch d_in"] = torch.FloatTensor(size=(0, cfg["d_in"])).to(cfg["dtype"]).to(cfg["buffer_device"])
         # Hopefully ~800 million elements doesn't blow up CPU
 
     running_frequency_counter = torch.zeros(size=(cfg["d_sae"],)).long().cpu()
