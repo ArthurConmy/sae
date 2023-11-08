@@ -18,7 +18,7 @@ def run_script(threshold, gpu_id, keywords):
 
 if __name__ == '__main__':
 
-    num_gpus = 3 # Number of GPUs available
+    num_gpus = 6 # Number of GPUs available
     num_jobs_per_gpu = 1  # Number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
@@ -26,9 +26,17 @@ if __name__ == '__main__':
     keyword_list = []
 
     for width in [16384*8]: # [2048, 16384*8, 16384]:
-        for lr in [8e-4]:
-            for l1_lambda in (torch.FloatTensor([8, 10, 12]) / 10_000).tolist(): # [0.0013, 0.001]:
+        for lr in [8e-4, 12 * 1e-4]:
+            for l1_lambda in (torch.FloatTensor([8, 12]) / 10_000).tolist(): # [0.0013, 0.001]:
                 keyword_list.append({"d_sae": width, "lr": lr, "l1_lambda": l1_lambda})
+
+    keyword_list.append(
+        {
+            "d_sae": 16384*16,
+            "lr": 8e-4,
+            "l1_lambda": 12 / 10_000,
+        },
+    )
 
 # if width > 100_000:
     # keyword_list[-1]["buffer_size"] = 2**16

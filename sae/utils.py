@@ -249,7 +249,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "test_set_batch_size": 100, # 20 Sequences
         "wandb_mode_online_override": False, # Even if in testing, wandb online anyways
         "test_every": 100,
-        "save_state_dict_every": lambda step: step%37123 == 1, # Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
+        "save_state_dict_every": lambda step: step%3712323482348327498327 == 14324830248320, # Disabled currently; used Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
         "anthropic_resample_batches": 200_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 

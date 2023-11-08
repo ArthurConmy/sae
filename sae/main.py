@@ -118,7 +118,7 @@ try:
 except Exception as e:
     print("Couldn't read file", __file__, "due to", str(e), "so not adding notes")
 
-run_name = f'LR-{cfg["lr"]}-LAMBDA-{cfg["l1_lambda"]}-{ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))}'
+run_name = f'LR-{cfg["lr"]}-LAMBDA-{cfg["l1_lambda"]}-DSAW-{cfg["d_sae"]}{ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))}'
 
 wandb.init(
     project="sae",
