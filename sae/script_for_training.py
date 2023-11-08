@@ -9,7 +9,7 @@ used = set()
 def run_script(threshold, gpu_id, keywords):
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    args = ["python", os.path.expanduser("~/sae/sae/main.py")]
+    args = ["python", os.path.expanduser("~/sae/sae/mainkeyword_list.py")]
     for key, value in keywords.items():
         args.append(f"--{key}={value}")
     print(" ".join(args))
@@ -18,13 +18,13 @@ def run_script(threshold, gpu_id, keywords):
 if __name__ == '__main__':
 
     num_gpus = 6 # Number of GPUs available
-    num_jobs_per_gpu = 1  # Number of jobs per GPU
+    num_jobs_per_gpu = 2  # Number of jobs per GPU
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     jobs = []
     keyword_list = []
 
-    for width in [2048, 16384, 16384*8]:
+    for width in [2048, 16384*8, 16384]:
         for lr in [5.5 * 1e-5, 1e-5]:
             keyword_list.append({"d_sae": width, "lr": lr})
             if width > 100_000:
