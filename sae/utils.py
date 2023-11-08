@@ -253,7 +253,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "save_state_dict_every": lambda step: step%37123 == 1, # Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
-        "anthropic_resample_batches": 32768, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
+        "anthropic_resample_batches": 140000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
         "resample_resample_factor": 0.05,
         "resample_sae_neurons_every": 2050427598475984347529875,
         "resample_sae_neurons_at": torch.arange(25_000, 125_000, 25_000).tolist(),
