@@ -1,21 +1,17 @@
 Coding up an SAE for a 1L model.
 
 <h2> Next steps: </h2>
-<b> The goal is to get L0 closer to 10-20 rather than ~200 :-( !!! </b>
+<b> Get comparable performance to Anthropic </b>
 
 Currently we have a good sweep of stuff, remember that Neel got low 100s L0 so maybe 100 is fine? We also have Anthropic A/1 replication on the way, too.
 
-Best: some fantastic loss recovered with 50-100 neurons firing; 0.0005 learning rate seems best: https://i.imgur.com/YCmoDhd.png
+Best: ~10 L0, 72% loss recovered.
 
 # TODO: 
 
-Implement Learning Rate pruner after resampling (so it then returns properly...)
-
-Look into bug where a lot looks to be resampled, despite firing frequencies telling a different story.
-
 Other ideas:
 
-* bfloat16 buffer for bigger buffer.
+* Geometric median crap?
 
 * Untie the bias in and bias out?
 
@@ -23,7 +19,7 @@ Other ideas:
 
 * Should we really be doing bias initialized to 0 in reinits? Seems like it makes a lot of non-zero fires, eek
 
-* Can't we make the neuron resampling procedure stochastic? i.e resample a neuron with some probablity that's a function of how few times it fired
+* Can't we make the neuron resampling procedure stochastic? i.e resample a neuron with some probability that's a function of how few times it fired
 
 ... then we sure should implement some good vizualization utils
 
@@ -55,4 +51,4 @@ We sampled neuron 0-19 inclusive. 5.5/8 were interpretable. 12 didn't fire on mo
 
 # Help
 
-`pip install -e .` is 
+`pip install -e .` is optimal for now. Maybe use `pip install -U torch==1.13.1` for crap hardware
