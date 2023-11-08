@@ -25,7 +25,6 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import LambdaLR
 from pathlib import Path
 from pprint import pprint
-from typing import Union, Literal, List, Dict, Tuple, Optional, Iterable, Callable, Any, Sequence, Set, Deque, DefaultDict, Iterator, Counter, FrozenSet, OrderedDict
 from torch.utils.data import Dataset
 from transformer_lens import utils
 
@@ -236,8 +235,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "batch_size": 32,  # Number of samples we pass through THE LM
         "seq_len": 128,  # Length of each input sequence for the model
         "d_in": 2048,  # Input dimension for the encoder model
-        "d_sae": 16384,  # Dimensionality for the sparse autoencoder (SAE)
-        "lr": 0.000055,  # This is low because Neel uses L2, and I think we should use mean squared error
+        "d_sae": 16384 * 8,  # Dimensionality for the sparse autoencoder (SAE)
+        "lr": 0.0001,  # This is low because Neel uses L2, and I think we should use mean squared error
         "l1_lambda": 0.0012,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
@@ -253,14 +252,14 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "save_state_dict_every": lambda step: step%37123 == 1, # Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
-        "anthropic_resample_batches": 140000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
+        "anthropic_resample_batches": 200_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
         "resample_sae_neurons_every": 2050427598475984347529875,
         "resample_sae_neurons_at": torch.arange(25_000, 125_000, 25_000).tolist(),
         "resample_sae_neurons_cutoff": 1e-6, # Maybe resample fewer later...
         "dtype": torch.bfloat16, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-        "buffer_size": 2**18, # Size of the buffer
+        "buffer_size": 2**21, # Size of the buffer
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
@@ -271,7 +270,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_finish": True,
         "resample_factor": 0.01,
         "log_everything": False,
-        "anthropic_resample_last": 2000, # Really timesed by cfg["batch_size"]...
+        "anthropic_resample_last": 12_500, # Really timesed by cfg["batch_size"]...
         "l1_loss_form": "l1", # or "hoyer"
         "l2_loss_form": "l2", # or "centred cosine sim"
     }
