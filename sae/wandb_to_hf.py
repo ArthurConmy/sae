@@ -80,6 +80,13 @@ for run in filtered_runs:
             # Nones mean it loads from back
         )
         torch.save(my_sae.state_dict(), pt_path)
+        # Also pickle dump the model
+        import pickle
+        pickle_path = curpath.parent.parent.parent / "sae-replication" / (f"{run.id}.pkl")
+        import numpy as np
+        numpy_state_dict = {k: np.array(v.float()) for k, v in my_sae.state_dict().items()}
+        with open(pickle_path, "wb") as f:
+            pickle.dump(numpy_state_dict, f)
 
 #%%
 
