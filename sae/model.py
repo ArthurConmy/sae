@@ -306,7 +306,8 @@ class SAE(HookedRootModule):
             d_sae=neel_cfg["d_mlp"] * neel_cfg["dict_mult"],
             dtype={"fp32": torch.float32}[neel_cfg["enc_dtype"]],
         )
-        self.load_state_dict(state_dict=state_dict)
+        self.load_state_dict(state_dict=state_dict, **({"map_location": torch.device('cpu')} if not torch.cuda.is_available() else {}))
+
 
     def get_config(
         self,
@@ -341,7 +342,7 @@ class SAE(HookedRootModule):
                 dir_fnames = [p.name for p in Path(logged_artifact_dir).iterdir()]
                 assert len(dir_fnames) == 1
                 fname = dir_fnames[0]
-                state_dict = torch.load(logged_artifact_dir / fname)
+                state_dict = torch.load(logged_artifact_dir / fname, **({"map_location": torch.device('cpu')} if not torch.cuda.is_available() else {}))
                 if "W_in" in state_dict:
                     # old format of state dict 
                     state_dict = {
@@ -357,6 +358,6 @@ class SAE(HookedRootModule):
                 break
 
         try:
-            self.load_state_dict(state_dict=state_dict)
+            self.load_state_dict(state_dict=state_dict) #, **({"map_location": torch.device('cpu')} if not torch.cuda.is_available() else {}))
         except Exception as e:
             print(f"Couldn't load because `{e}`; may want to check for config mismatch {run.cfg=}; {self.cfg=}")
