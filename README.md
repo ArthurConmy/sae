@@ -21,6 +21,8 @@ Other ideas:
 
 * Can't we make the neuron resampling procedure stochastic? i.e resample a neuron with some probability that's a function of how few times it fired
 
+* Should we improve the lib and make `pip install git+` actually work from colab? Idk why it dopesn't
+
 ... then we sure should implement some good vizualization utils
 
 # Informal results 
