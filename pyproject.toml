@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "This poetry setup was not working with `poetry install` on RunPod.io GPUs, so I just used `pip install -e .` in practice."
 authors = ["Arthur Conmy"]
 readme = "README.md"
+packages = [{include = "sae"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13" # For dependency crap ... ideally support Python 3.8
