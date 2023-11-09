@@ -3,9 +3,9 @@ Coding up an SAE for a 1L model.
 <h2> Next steps: </h2>
 <b> Get comparable performance to Anthropic </b>
 
-Currently we have a good sweep of stuff, remember that Neel got low 100s L0 so maybe 100 is fine? We also have Anthropic A/1 replication on the way, too.
+Currently we have a good sweep of stuff, remember that Neel got low 100s L0. We also have Anthropic A/1 replication on the way, too.
 
-Best: ~10 L0, 72% loss recovered.
+Best: 64k and 131k Dict Features at 84% Loss Recovered, 9 L0. And 88% Loss Recoverd 22 L0
 
 # TODO: 
 
