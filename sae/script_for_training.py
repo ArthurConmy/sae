@@ -25,13 +25,13 @@ if __name__ == '__main__':
     jobs = []
     keyword_list = []
 
-    for width in [16384*8, 16384*4]: # [2048, 16384*8, 16384]:
-        for l1_lambda in (torch.FloatTensor([8, 12, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
-            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
-
-    # for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
-    #     for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
+    # for width in [16384*8, 16384*4]: # [2048, 16384*8, 16384]:
+    #     for l1_lambda in (torch.FloatTensor([8, 12, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
     #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
+
+    for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
+        for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
+            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
 
     keyword_list[-1]["delete_cache"]=True
 
