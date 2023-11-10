@@ -268,7 +268,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_lr_factor": 0.1, # This seems to help a little. But not THAT much, so tone down
         "sched_warmup_epochs": 50*20,
         "sched_finish": True,
-        "resample_factor": 0.01,
+        "resample_factor": 0.2,
         "log_everything": False,
         "anthropic_resample_last": 7_500, # Really timesed by cfg["batch_size"]...
         "l1_loss_form": "l1", # or "hoyer"
