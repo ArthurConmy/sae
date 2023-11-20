@@ -8,6 +8,8 @@ if ipython is not None:
 
 import wandb
 import torch
+from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, get_neel_model, get_cfg
+
 
 # Initialize the wandb API
 api = wandb.Api()
@@ -80,9 +82,16 @@ for run in filtered_runs:
             # Nones mean it loads from back
         )
         torch.save(my_sae.state_dict(), pt_path)
+
+    pickle_path = curpath.parent.parent.parent / "sae-replication" / (f"{run.id}.pkl")
+
+    if not os.path.exists(pickle_path):
+        
+        if not os.path.exists(pt_path):
+            my_sae.load_state_dict(torch.load(pt_path))
+        
         # Also pickle dump the model
         import pickle
-        pickle_path = curpath.parent.parent.parent / "sae-replication" / (f"{run.id}.pkl")
         import numpy as np
         numpy_state_dict = {k: np.array(v.float()) for k, v in my_sae.state_dict().items()}
         with open(pickle_path, "wb") as f:
@@ -132,3 +141,52 @@ assert False
 # !git clone
 
 # %%
+
+run_name = "2rqzhpl3"
+
+# Load JSON
+import json
+json_path = curpath.parent.parent.parent / "sae-replication" / (f"{run_name}.json")
+
+with open(json_path, "r") as f:
+    cfg = json.load(f)
+
+my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": eval(cfg["dtype"]), "device": "cpu"})
+# "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"], dtype = 
+
+#%%
+
+# Load in weights
+pt_path = curpath.parent.parent.parent / "sae-replication" / (f"{run_name}.pt")
+my_sae.load_state_dict(torch.load(pt_path))
+
+# %%
+
+logits, cache = my_sae.run_with_cache(torch.ones(1, my_sae.d_in, dtype = my_sae.dtype))
+
+# %%
+
+cache.keys()
+
+#%%
+
+ds = iter(load_dataset(cfg["dataset"], *(eval(cfg["dataset_args"]) or []), **(eval(cfg["dataset_kwargs"]) or {})))
+
+# %%
+
+from datasets import load_dataset
+# LOL EVEN WORSE
+test_tokens = get_batch_tokens(
+    lm=lm,
+    dataset = next(ds),
+    batch_size=1,
+    seq_len=256,
+)
+
+#%%
+
+test_loss = my_sae.get_test_loss(
+    lm, test_tokens, return_mode="all"
+)
+
+#%%
