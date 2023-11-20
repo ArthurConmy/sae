@@ -136,7 +136,7 @@ class SAE(HookedRootModule):
         )
         new_W_dec = torch.nn.init.kaiming_uniform_(
             torch.empty(
-                indices.shape[0], self.d_in, dtype=self.dtype, device=self.device
+                indices.shape[0], self.d_in, dtype=self.dtype, device=self.get_test_lossevice
             )
         )
         self.W_enc.data[:, indices] = new_W_enc

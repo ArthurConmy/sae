@@ -51,142 +51,115 @@ from pathlib import Path
 curpath = Path(__file__)
 assert str(curpath).endswith("sae/wandb_to_hf.py"), f"{str(curpath)=} sus"
 
-#%%
-
-import json
-import os
-
-for run in filtered_runs:
-    cfg = run.config # Yeeeeah
-    print(run.id)
-
-    json_path = curpath.parent.parent.parent / "sae-replication" / (f"{run.id}.json")
-
-    if not os.path.exists(json_path):
-        # Save the config as a JSON, make all values strings
-        with open(json_path, "w") as f:
-            json.dump({k: str(v) for k, v in cfg.items()}, f)
-
-    if isinstance(cfg["dtype"], str):
-        cfg["dtype"] = eval(cfg["dtype"])
-
-    if not torch.cuda.is_available(): 
-        cfg["device"] = "cpu"
-
-    my_sae=SAE(cfg)
-
-    pt_path = curpath.parent.parent.parent / "sae-replication" / (f"{run.id}.pt")
-    if not os.path.exists(pt_path):
-        my_sae.load_from_my_wandb(
-            run_id=run.id,
-            # Nones mean it loads from back
-        )
-        torch.save(my_sae.state_dict(), pt_path)
-
-    pickle_path = curpath.parent.parent.parent / "sae-replication" / (f"{run.id}.pkl")
-
-    if not os.path.exists(pickle_path):
-        
-        if not os.path.exists(pt_path):
-            my_sae.load_state_dict(torch.load(pt_path))
-        
-        # Also pickle dump the model
-        import pickle
-        import numpy as np
-        numpy_state_dict = {k: np.array(v.float()) for k, v in my_sae.state_dict().items()}
-        with open(pickle_path, "wb") as f:
-            pickle.dump(numpy_state_dict, f)
-
-#%%
-
-assert False
-
-# torch.save(my_sae.state_dict(), "hello.pt")
-
-# !apt-get install git-lfs
-
-# from huggingface_hub import HfFolder, Repository
-# import torch
-
-# # Authenticate with Hugging Face (you'll need to get your token from the Hugging Face website)
-# hf_token = "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"  # Replace with your actual token
-# HfFolder.save_token(hf_token)
-
-# # Assuming you have your model in a variable `model`
-
-# # Fine for now
-# # model_path = "model.pt"  # The path where you want to save the model
-# # torch.save(my_sae.state_dict(), model_path)  # Save model state dict
-
-# # Define your repository name and local folder to clone to
-# repo_name = "sae-replication"  # Replace with your repository name
-# local_repo_path = "sae-replication"  # Local path to clone the repository to
-# username = "ArthurConmy"  # Replace with your Hugging Face username
-
-# # Clone the repository from Hugging Face
-# repo = Repository(local_repo_path, clone_from=f"{username}/{repo_name}")
-
-# # Copy the model file to the cloned repository directory
-# !cp {model_path} {local_repo_path}
-
-# # Using the Repository class to push to the hub
-# repo.git_add(auto_lfs_track=True)  # Auto track large files with git-lfs
-# repo.git_commit("Add new model")  # Commit with a message
-# repo.git_push()  # Push to the hub
-
-# print(f"Model pushed to your Hugging Face repository: {username}/{repo_name}")
-
-# !huggingface-cli login
-
-# !git clone
-
 # %%
 
 run_name = "2rqzhpl3"
+import transformer_lens.utils as tl_utils
+cfg = tl_utils.download_file_from_hf("ArthurConmy/sae-replication", f"{run_name}.json")
 
-# Load JSON
-import json
-json_path = curpath.parent.parent.parent / "sae-replication" / (f"{run_name}.json")
-
-with open(json_path, "r") as f:
-    cfg = json.load(f)
-
-my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": eval(cfg["dtype"]), "device": "cpu"})
+my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": eval(cfg["dtype"]), "device": "cuda:0"})
 # "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"], dtype = 
 
 #%%
 
 # Load in weights
 pt_path = curpath.parent.parent.parent / "sae-replication" / (f"{run_name}.pt")
-my_sae.load_state_dict(torch.load(pt_path))
-
-# %%
-
-logits, cache = my_sae.run_with_cache(torch.ones(1, my_sae.d_in, dtype = my_sae.dtype))
-
-# %%
-
-cache.keys()
 
 #%%
 
+import huggingface_hub
+my_file = huggingface_hub.hf_hub_download("ArthurConmy/sae-replication", f"{run_name}.pt")
+with open(my_file, "rb") as f:
+    state_dict = torch.load(f)
+my_sae.load_state_dict(state_dict)
+
+#%%
+
+my_sae.to("cuda:0")
+
+#%%
+
+from datasets import load_dataset
 ds = iter(load_dataset(cfg["dataset"], *(eval(cfg["dataset_args"]) or []), **(eval(cfg["dataset_kwargs"]) or {})))
 
 # %%
 
-from datasets import load_dataset
-# LOL EVEN WORSE
-test_tokens = get_batch_tokens(
-    lm=lm,
-    dataset = next(ds),
-    batch_size=1,
-    seq_len=256,
-)
+for _ in range(100):
+    test_tokens = get_batch_tokens(
+        lm=lm,
+        dataset = ds,
+        batch_size=30,
+        seq_len=256,
+    )
 
-#%%
 
-test_loss = my_sae.get_test_loss(
-    lm, test_tokens, return_mode="all"
-)
+    loss_func = torch.nn.CrossEntropyLoss(reduction="none")
+    factor = 0.0
+    zero_ablation_logits = lm.run_with_hooks(
+        test_tokens,
+        fwd_hooks=[(cfg["act_name"], lambda activation, hook: factor*activation)],
+    )
+    zero_ablation_loss = loss_func(zero_ablation_logits[:, :-1, :].flatten(0, 1), test_tokens[:, 1:].flatten(0, 1))
+
+
+    sae_loss = my_sae.get_test_loss(
+        lm, test_tokens, return_mode="all"
+    ).flatten()
+
+
+    # Get loss normally
+    lm_logits = lm(test_tokens)
+    lm_loss = loss_func(lm_logits[:, :-1, :].flatten(0, 1), test_tokens[:, 1:].flatten(0, 1))
+
+
+    # Calculate the loss recovered
+    loss_recovered = (zero_ablation_loss - sae_loss) / (zero_ablation_loss - lm_loss)
+
+
+    # Sort the test_losses by true losses
+    # sorted_test_losses = sorted(enumerate(sae_loss.tolist()), key = lambda x: lm_loss[x[0]])
+
+    arr1inds = lm_loss.argsort().tolist()
+    sorted_lm_loss = lm_loss[arr1inds[::-1]]
+    sorted_sae_loss = sae_loss[arr1inds[::-1]]
+    sorted_zero_ablation_loss = zero_ablation_loss[arr1inds[::-1]]
+
+    if False:
+        
+        import plotly.express as px
+
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x = list(range(len(sorted_lm_loss))),
+            y = sorted_zero_ablation_loss.detach().cpu().numpy(),
+            mode='lines',
+        ))
+        fig.add_trace(
+        go.Scatter(
+            x=list(range(len(sorted_lm_loss))),
+            y=sorted_sae_loss.detach().cpu().numpy(),
+            mode='lines',
+        ))
+
+        fig.add_trace(go.Scatter(
+            x = list(range(len(sorted_lm_loss))),
+            y = sorted_lm_loss.detach().cpu().numpy(),
+            mode='lines',
+        ))
+
+
+        fig.show()
+
+
+    # sort the loss recovered
+
+    sorted_loss_recovered = sorted(loss_recovered)
+    middle_of_loss_recovered = torch.tensor(sorted_loss_recovered[len(sorted_loss_recovered)//4: 3*(len(sorted_loss_recovered)//4)])
+
+    print(
+        f"Loss recovered: {middle_of_loss_recovered.mean():.2f} +- {middle_of_loss_recovered.std():.2f}",
+        "Full loss recovered:", round(loss_recovered.mean().item(), 4), round(loss_recovered.std().item(), 4),
+    )
 
 #%%
