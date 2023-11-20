@@ -96,8 +96,8 @@ for batch_idx in range(100):
     test_tokens = get_batch_tokens(
         lm=lm,
         dataset = ds,
-        batch_size=30,
-        seq_len=256,
+        batch_size=60,
+        seq_len=128,
     )
 
     def abl_hook(mlp_acts, hook):
