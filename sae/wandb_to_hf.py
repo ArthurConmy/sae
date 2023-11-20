@@ -84,6 +84,15 @@ my_sae.to("cuda:0")
 from datasets import load_dataset
 ds = iter(load_dataset(cfg["dataset"], *(eval(cfg["dataset_args"]) or []), **(eval(cfg["dataset_kwargs"]) or {})))
 
+#%%
+
+toks = batch_tokens = get_batch_tokens(
+    lm=lm,
+    dataset=ds,
+    seq_len=128,
+    batch_size=100,
+) # TODO test indetically to main.py
+
 # %%
 
 MODE = "mean"
@@ -93,12 +102,15 @@ min_abs_denominators = []
 loss_recovereds = []
 
 for batch_idx in range(100):
-    test_tokens = get_batch_tokens(
-        lm=lm,
-        dataset = ds,
-        batch_size=60,
-        seq_len=128,
-    )
+    if batch_idx != 0:
+        test_tokens = get_batch_tokens(
+            lm=lm,
+            dataset = ds,
+            batch_size=60,
+            seq_len=128,
+        )
+    else:
+        test_tokens = toks
 
     def abl_hook(mlp_acts, hook):
         if MODE == "zero": 
@@ -198,6 +210,7 @@ for batch_idx in range(100):
 
     runnin_loss_sum += loss_recovered.mean().item()
     print(f"Running loss sum: {runnin_loss_sum/(batch_idx+1):.2f}")
+    break
 
 
 
@@ -212,7 +225,13 @@ batch_indices = sorted_loss_recovered_indices // (test_tokens.shape[1] - 1)
 seq_indices = sorted_loss_recovered_indices % (test_tokens.shape[1] - 1)
 
 
-# %%
+#%%
+
+get_batch_tokens(
+
+)
+
+#%%
 
 for idx in range(10):
     b, s = batch_indices[idx], seq_indices[idx]

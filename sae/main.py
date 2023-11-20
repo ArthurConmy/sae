@@ -120,15 +120,16 @@ except Exception as e:
 
 run_name = f'LR-{cfg["lr"]}-LAMBDA-{cfg["l1_lambda"]}-DSAW-{cfg["d_sae"]}{ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))}'
 
-wandb.init(
-    project="sae",
-    group=cfg["wandb_group"],
-    job_type="train",
-    config=cfg,
-    name=run_name,
-    mode="offline" if cfg["testing"] or cfg["wandb_mode_online_override"] else "online",
-    notes=wandb_notes,
-)   
+if False:
+    wandb.init(
+        project="sae",
+        group=cfg["wandb_group"],
+        job_type="train",
+        config=cfg,
+        name=run_name,
+        mode="offline" if cfg["testing"] or cfg["wandb_mode_online_override"] else "online",
+        notes=wandb_notes,
+    )   
 
 #%%
 
