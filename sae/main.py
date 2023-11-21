@@ -96,6 +96,7 @@ def resample_at_step_idx(step_idx) -> bool:
     return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
 
 lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l").to(cfg["dtype"])
+lm.tokenizer = AutoTokenizer.from_pretrained("ArthurConmy/alternative-neel-tokenizer")
 assert lm.cfg.d_mlp == cfg["d_in"], f"lm.cfg.d_mlp {lm.cfg.d_mlp} != cfg['d_in'] {cfg['d_in']}"
 
 # %%
