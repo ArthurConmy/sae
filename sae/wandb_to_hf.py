@@ -98,7 +98,7 @@ toks = batch_tokens = get_batch_tokens(
 # %%
 
 MODE = "zero"
-runnin_loss_sum = 0.0
+running_stable_loss_recovered_sum = 0.0
 
 min_abs_denominators = []
 loss_recovereds = []
@@ -210,28 +210,25 @@ for batch_idx in range(100):
         mode='lines',
     ))
 
-    runnin_loss_sum += loss_recovered.mean().item()
-    print(f"Running loss sum: {runnin_loss_sum/(batch_idx+1):.2f}")
-    break
+    running_stable_loss_recovered_sum += stable_loss_recovered.item()
+    print(f"Running loss sum: {running_stable_loss_recovered_sum/(batch_idx+1):.2f}")
 
 
+
+#%%
+
+for i in range(15):
+    print(2**i)
+    print((ablation_loss[:2**i].mean() - sae_loss[:2**i].mean()) / (ablation_loss[:2**i].mean() - lm_loss[:2**i].mean()))
 
 #%%
 
 # What do the bad points look like?
 # Use unflattened_loss_recovered with argsort
-
 sorted_loss_recovered_indices = (-loss_recovered).argsort()
 
 batch_indices = sorted_loss_recovered_indices // (test_tokens.shape[1] - 1)
 seq_indices = sorted_loss_recovered_indices % (test_tokens.shape[1] - 1)
-
-
-#%%
-
-get_batch_tokens(
-
-)
 
 #%%
 

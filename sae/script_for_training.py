@@ -18,8 +18,13 @@ def run_script(threshold, gpu_id, keywords):
 
 if __name__ == '__main__':
 
-    num_gpus = 6 # Number of GPUs available
-    num_jobs_per_gpu = 1  # Number of jobs per GPU
+    num_gpus = 2 # Number of GPUs available
+    num_jobs_per_gpu = 2  # Number of jobs per GPU
+
+# LR-0.0012-LAMBDA-0.0015999999595806003-DSAW-2048Thu_Nov__9_02-56-22_2023_48
+# LR-0.0012-LAMBDA-0.0015999999595806003-DSAW-16384Thu_Nov__9_02-56-22_2023_51
+# LR-0.0012-LAMBDA-0.0007999999797903001-DSAW-2048Thu_Nov__9_02-56-22_2023_78
+# LR-0.0012-LAMBDA-0.0007999999797903001-DSAW-16384Thu_Nov__9_02-56-22_2023_84
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     jobs = []
@@ -29,8 +34,8 @@ if __name__ == '__main__':
     #     for l1_lambda in (torch.FloatTensor([8, 12, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
     #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
 
-    for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
-        for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
+    for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
+        for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
             keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
 
     keyword_list[-1]["delete_cache"]=True
