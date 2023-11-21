@@ -49,8 +49,6 @@ from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, ge
 
 #%%
 
-# # Neel's config # See https://huggingface.co/NeelNanda/sparse_autoencoder/blob/main/47_cfg.json
-
 cfg = get_cfg()
 
 if ipython is None:

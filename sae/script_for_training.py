@@ -31,19 +31,19 @@ if __name__ == '__main__':
     num_gpus = 8 # Number of GPUs available
     num_jobs_per_gpu = 2  # Number of jobs per GPU
 
-    # Add the smaller width things at the start and at the end
-    for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
-        for width in [16384]: # [2048, 16384*8, 16384]:
-            # Make this basically the same, but with the 0.2 for resampled bois
-            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "resample_factor": 0.2, "sched_type": "cosine_warmup", "buffer_size": 2**19})
+    # # Add the smaller width things at the start and at the end
+    # for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
+    #     for width in [16384]: # [2048, 16384*8, 16384]:
+    #         # Make this basically the same, but with the 0.2 for resampled bois
+    #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "resample_factor": 0.2, "sched_type": "cosine_warmup", "buffer_size": 2**19})
 
-    for l1_lambda in [0.0016, 0.0008, 0.0012]:
-        for width in [131072, 65536]:
-            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "sched_type": "none", "buffer_size": 2**19})
+    # for l1_lambda in [0.0016, 0.0008, 0.0012]:
+    #     for width in [131072, 65536]:
+    #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "sched_type": "none", "buffer_size": 2**19})
 
     for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
         for width in [16384//8]: # [2048, 16384*8, 16384]:
-            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "resample_factor": 0., "buffer_size": 2**19, "sched_type": "cosine_warmup"})
+            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "resample_factor": 0.2, "buffer_size": 2**19, "sched_type": "cosine_warmup"})
 
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
