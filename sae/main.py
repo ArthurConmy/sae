@@ -120,7 +120,7 @@ except Exception as e:
 
 run_name = f'LR-{cfg["lr"]}-LAMBDA-{cfg["l1_lambda"]}-DSAW-{cfg["d_sae"]}{ctime().replace(" ", "_").replace(":", "-") + "_" + str(randint(1, 100))}'
 
-if False:
+if True:
     wandb.init(
         project="sae",
         group=cfg["wandb_group"],
