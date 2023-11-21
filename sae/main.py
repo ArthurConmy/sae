@@ -2,6 +2,7 @@
 
 import os 
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Ignores a warning, unsure if this option is right
+os.environ["TRANSFORMERS_CACHE"] = "/workspace/cache" # Cache transformers
 
 from IPython import get_ipython
 ipython = get_ipython()
@@ -137,7 +138,7 @@ if True:
 
 sae = deepcopy(dummy_sae) # Reinitialize `sae`
 opt = torch.optim.Adam(sae.parameters(), lr=cfg["lr"], betas=(cfg["beta1"], cfg["beta2"]))
-sched = None if cfg["sched_type"] is None else torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["sched_epochs"], eta_min=cfg["lr"]*cfg["sched_lr_factor"])
+sched = None if cfg["sched_type"].lower()=="none" else torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["sched_epochs"], eta_min=cfg["lr"]*cfg["sched_lr_factor"])
 if sched is not None: 
     for _ in range(cfg["sched_warmup_epochs"]):
         sched.step()
