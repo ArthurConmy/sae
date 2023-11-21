@@ -37,7 +37,7 @@ if __name__ == '__main__':
     if torch.cuda.device_count() == 2:
         for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
             for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
-                keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
+		    keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
     elif torch.cuda.device_count() == 6:
         for l1_lambda in [0.0016, 0.0008, 0.0012]:
 		for width in [131072, 65536]:
