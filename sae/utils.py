@@ -263,7 +263,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
-        "sched_type": "cosine_annealing", # Mark as None if not using 
+        "sched_type": None, # "cosine_annealing", # Mark as None if not using 
         "sched_epochs": 50*20, # Think that's right???
         "sched_lr_factor": 0.1, # This seems to help a little. But not THAT much, so tone down
         "sched_warmup_epochs": 50*20,
