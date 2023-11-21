@@ -73,8 +73,9 @@ if __name__ == '__main__':
 # if width > 100_000:
     # keyword_list[-1]["buffer_size"] = 2**16
 
+    assert len(keyword_list) <= num_gpus * num_jobs_per_gpu, "Too many jobs for the number of GPUs available"
     for threshold_idx, keywords in enumerate(keyword_list):
-        gpu_id = (threshold_idx // num_jobs_per_gpu) % num_gpus
+        gpu_id = threshold_idx % num_gpus
         jobs.append(pool.apply_async(run_script, (keywords, gpu_id, keywords)))
     
     for job in jobs:
