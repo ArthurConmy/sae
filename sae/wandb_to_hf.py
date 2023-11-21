@@ -44,7 +44,9 @@ cfg = first_run.config # Yeeeeah
 if isinstance(cfg["dtype"], str):
     cfg["dtype"] = eval(cfg["dtype"])
 
-import torch; lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l") 
+import torch
+lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l") 
+
 # .to(first_run.config["dtype"]) # Lol be careful
 
 #%%
@@ -95,7 +97,7 @@ toks = batch_tokens = get_batch_tokens(
 
 # %%
 
-MODE = "mean"
+MODE = "zero"
 runnin_loss_sum = 0.0
 
 min_abs_denominators = []
