@@ -12,6 +12,7 @@ if ipython is not None:
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import torch
+from transformers import AutoTokenizer
 assert torch.cuda.device_count() == 1, torch.cuda.device_count()
 assert os.path.exists("/workspace/sae/weights") # For weight saving
 
