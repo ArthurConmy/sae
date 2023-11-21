@@ -94,6 +94,8 @@ if cfg["resample_mode"] == "anthropic":
 
     assert cfg["anthropic_resample_batches"] >= cfg["d_sae"], f"anthropic_resample_batches {cfg['anthropic_resample_batches']} must be greater than d_sae {cfg['d_sae']}"
 
+assert cfg["sched_type"].lower() in ["none", "cosine_warmup"], f"Unknown sched_type {cfg['sched_type']}"
+
 def resample_at_step_idx(step_idx) -> bool:
     return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
 
