@@ -34,9 +34,14 @@ if __name__ == '__main__':
     #     for l1_lambda in (torch.FloatTensor([8, 12, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
     #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
 
-    for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
-        for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
-            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
+    if torch.cuda.device_count() == 2:
+        for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
+            for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
+                keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
+    elif torch.cuda.device_count() == 6:
+        raise NotImplementedError("Not implemented for 6 GPUs")
+    else:   
+        raise NotImplementedError("Not implemented for 1 GPU")
 
     keyword_list[-1]["delete_cache"]=True
 
