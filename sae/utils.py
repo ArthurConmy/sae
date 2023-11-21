@@ -236,7 +236,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "seq_len": 128,  # Length of each input sequence for the model
         "d_in": 2048,  # Input dimension for the encoder model
         "d_sae": 16384 * 8,  # Dimensionality for the sparse autoencoder (SAE)
-        "lr": 0.0001,  # This is low because Neel uses L2, and I think we should use mean squared error
+        "lr": 0.0012,  # This is low because Neel uses L2, and I think we should use mean squared error
         "l1_lambda": 0.0012,
         "dataset": "c4",  # Name of the dataset to use
         "dataset_args": ["en"],  # Any additional arguments for the dataset
@@ -259,7 +259,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "dtype": torch.bfloat16, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-        "buffer_size": 2**19, # Size of the buffer
+        "buffer_size": 2**21, # Size of the buffer
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
@@ -268,7 +268,7 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_lr_factor": 0.1, # This seems to help a little. But not THAT much, so tone down
         "sched_warmup_epochs": 50*20,
         "sched_finish": True,
-        "resample_factor": 0.2,
+        "resample_factor": 0.01,
         "log_everything": False,
         "anthropic_resample_last": 7_500, # Really timesed by cfg["batch_size"]...
         "l1_loss_form": "l1", # or "hoyer"
