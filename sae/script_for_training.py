@@ -22,14 +22,13 @@ if __name__ == '__main__':
 # LR-0.0012-LAMBDA-0.0007999999797903001-DSAW-2048Thu_Nov__9_02-56-22_2023_78
 # LR-0.0012-LAMBDA-0.0007999999797903001-DSAW-16384Thu_Nov__9_02-56-22_2023_84
 
-    pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
-    jobs = []
-    keyword_list = []
-
     # for width in [16384*8, 16384*4]: # [2048, 16384*8, 16384]:
     #     for l1_lambda in (torch.FloatTensor([8, 12, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
     #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
 
+    jobs = []
+    keyword_list = []
+    
     if torch.cuda.device_count() == 2:
         num_gpus = 2 # Number of GPUs available
         num_jobs_per_gpu = 2  # Number of jobs per GPU
@@ -45,6 +44,7 @@ if __name__ == '__main__':
     else:   
         raise NotImplementedError("Not implemented for 1 GPU")
 
+    pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     keyword_list[-1]["delete_cache"]=True
 
     # keyword_list.append(
