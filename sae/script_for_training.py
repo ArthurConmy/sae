@@ -17,10 +17,6 @@ def run_script(threshold, gpu_id, keywords):
     subprocess.run(args, env=env)
 
 if __name__ == '__main__':
-
-    num_gpus = 2 # Number of GPUs available
-    num_jobs_per_gpu = 2  # Number of jobs per GPU
-
 # LR-0.0012-LAMBDA-0.0015999999595806003-DSAW-2048Thu_Nov__9_02-56-22_2023_48
 # LR-0.0012-LAMBDA-0.0015999999595806003-DSAW-16384Thu_Nov__9_02-56-22_2023_51
 # LR-0.0012-LAMBDA-0.0007999999797903001-DSAW-2048Thu_Nov__9_02-56-22_2023_78
@@ -35,10 +31,14 @@ if __name__ == '__main__':
     #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
 
     if torch.cuda.device_count() == 2:
+        num_gpus = 2 # Number of GPUs available
+        num_jobs_per_gpu = 2  # Number of jobs per GPU
         for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
             for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
                 keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
     elif torch.cuda.device_count() == 6:
+        num_gpus = 6 # Number of GPUs available
+        num_jobs_per_gpu = 1  # Number of jobs per GPU
         for l1_lambda in [0.0016, 0.0008, 0.0012]:
             for width in [131072, 65536]:
                 keyword_list.append({"d_sae": width, "lr":0.0012, "l1_lambda":l1_lambda})
