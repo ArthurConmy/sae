@@ -20,8 +20,8 @@ matplotlib = "^3.8.1"
 ipython = "^8.14.0"
 
 # https://github.com/neelnanda-io/TransformerLens/issues/404
-tokenizers = "<=0.13.1" 
-transformers = "<=4.33.1"
+# tokenizers = "<=0.13.1" 
+# transformers = "<=4.33.1"
 
 datasets = "^2.14.6"
 

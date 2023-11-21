@@ -39,7 +39,9 @@ if __name__ == '__main__':
             for width in [16384, 16384//8]: # [2048, 16384*8, 16384]:
                 keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda})
     elif torch.cuda.device_count() == 6:
-        raise NotImplementedError("Not implemented for 6 GPUs")
+        for l1_lambda in [0.0016, 0.0008, 0.0012]:
+		for width in [131072, 65536]:
+			keyword_list.append({"d_sae": width, "lr":0.0012, "l1_lambda":l1_lambda})
     else:   
         raise NotImplementedError("Not implemented for 1 GPU")
 
