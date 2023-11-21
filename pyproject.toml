@@ -19,9 +19,15 @@ line_profiler = "^4.1.1"
 matplotlib = "^3.8.1"
 ipython = "^8.14.0"
 
+<<<<<<< HEAD
 # https://github.com/neelnanda-io/TransformerLens/issues/404
 # tokenizers = "<=0.13.1" 
 # transformers = "<=4.33.1"
+=======
+# # https://github.com/neelnanda-io/TransformerLens/issues/404
+#tokenizers = "<=0.13.1" 
+#transformers = "<=4.33.1"
+>>>>>>> 809c54f0b25ae4d891152a102bdc76668101d27d
 
 datasets = "^2.14.6"
 
