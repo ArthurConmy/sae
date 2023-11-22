@@ -37,9 +37,9 @@ if __name__ == '__main__':
     #         # Make this basically the same, but with the 0.2 for resampled bois
     #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "resample_factor": 0.2, "sched_type": "cosine_warmup", "buffer_size": 2**19})
 
-    # for l1_lambda in [0.0016, 0.0008, 0.0012]:
-    #     for width in [131072, 65536]:
-    #         keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "sched_type": "none", "buffer_size": 2**19})
+    for l1_lambda in [0.0008, 0.0012]:
+        for width in [2048, 131072, 65536, 100000, 1024]:
+            keyword_list.append({"d_sae": width, "lr": 0.0012, "l1_lambda": l1_lambda, "sched_type": "none", "buffer_size": 2**19, "sched_type": "cosine_warmup"})
 
     for l1_lambda in (torch.FloatTensor([8, 16]) / 10_000).tolist(): # [0.0013, 0.001]:
         for width in [16384//8]: # [2048, 16384*8, 16384]:
