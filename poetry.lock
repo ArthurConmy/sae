@@ -4120,13 +4120,13 @@ test = ["argcomplete (>=3.0.3)", "mypy (>=1.6.0)", "pre-commit", "pytest (>=7.0,
 
 [[package]]
 name = "transformer-lens"
-version = "1.9.1"
+version = "1.10.0"
 description = "An implementation of transformers tailored for mechanistic interpretability."
 optional = false
 python-versions = ">=3.8,<4.0"
 files = [
-    {file = "transformer_lens-1.9.1-py3-none-any.whl", hash = "sha256:62f2b2b2f8f286e35cdd296ec2592b5fd768ac820e71a4ee0697a4081fd2bd39"},
-    {file = "transformer_lens-1.9.1.tar.gz", hash = "sha256:a0d36f52dcc641da857d4f1df469fb314e80139813be877e5b4ab14298535073"},
+    {file = "transformer_lens-1.10.0-py3-none-any.whl", hash = "sha256:1a296e8fe49e059d627869ea6ebaf1d8023af6a14aebe98f7392231f26bfeeaf"},
+    {file = "transformer_lens-1.10.0.tar.gz", hash = "sha256:9b45d70730c19f72e3452760d9a47c6de3a3c64a626f85d29a3185a559baddd1"},
 ]
 
 [package.dependencies]
@@ -4675,4 +4675,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9, <3.13"
-content-hash = "eb2aca8cd4aeac04e141bb1714d39824d7c8de37f7e54de86992d33ce38c5cce"
+content-hash = "af21da1bcc49535ccc9bca69d310be029c947214a2f58d84655d5a9815394214"

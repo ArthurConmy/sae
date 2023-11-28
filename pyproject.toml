@@ -11,7 +11,7 @@ python = ">=3.9, <3.13" # For dependency crap ... ideally support Python 3.8
 torch = "^1.13.1, <3.0"
 ruff = "^0.1.3"
 einops = "^0.7.0"
-transformer-lens = "^1.7.0"
+transformer-lens = "^1.10.0"
 wandb = "^0.15.12"
 plotly = "^5.18.0"
 circuitsvis = "^1.43.1"
