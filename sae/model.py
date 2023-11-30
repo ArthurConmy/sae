@@ -130,18 +130,25 @@ class SAE(HookedRootModule):
             torch.empty(
                 self.d_in, indices.shape[0], dtype=self.dtype, device=self.device
             )
-        ) * self.cfg["resample_factor"]
+        )
+        new_W_enc /= torch.norm(new_W_enc, dim=0, keepdim=True)
+        self.W_enc.data[:, indices] = new_W_enc
+        if indices.shape[0] < self.d_sae:
+            sum_of_all_norms = torch.norm(self.W_enc.data, dim=0).sum()
+            sum_of_all_norms -= len(indices)
+            average_norm = sum_of_all_norms / (self.d_sae - len(indices))
+            # metrics["resample_norm_thats_hopefully_less_or_around_one"] = average_norm.item()
+            self.W_enc.data[:, indices] *= self.cfg["resample_factor"] * average_norm
+        else:
+            # Whatever, norm 1 times resample factor seems fiiiiine
+            self.W_enc.data[:, indices] *= self.cfg["resample_factor"]
+        new_W_enc *= self.cfg["resample_factor"]
         new_b_enc = torch.zeros(
             indices.shape[0], dtype=self.dtype, device=self.device
         )
-        new_W_dec = torch.nn.init.kaiming_uniform_(
-            torch.empty(
-                indices.shape[0], self.d_in, dtype=self.dtype, device=self.get_test_lossevice
-            )
-        )
-        self.W_enc.data[:, indices] = new_W_enc
         self.b_enc.data[indices] = new_b_enc
-        self.W_dec.data[indices, :] = new_W_dec
+        self.W_dec.data[indices, :] = self.W_enc.data[:, indices].T # Clone em!
+        self.W_dec.data[indices, :] /= torch.norm(self.W_dec.data[indices, :], dim=1, keepdim=True)
         self.W_dec /= torch.norm(self.W_dec, dim=1, keepdim=True)
 
     def anthropic_resample(
