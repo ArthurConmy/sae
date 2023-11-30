@@ -260,20 +260,20 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "dtype": torch.bfloat16, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
-        "buffer_size": 2**21, # Size of the buffer
+        "buffer_size": 2**19, # Size of the buffer
         "buffer_device": "cuda:0", # Size of the buffer
         "testing": False,
         "delete_cache": False, # TODO make this parsed better, likely is just a string
-        "sched_type": "none", # "cosine_annealing", # Mark as None if not using 
+        "sched_type": "cosine_warmup", # "cosine_annealing", # Mark as None if not using 
         "sched_epochs": 50*20, # Think that's right???
         "sched_lr_factor": 0.1, # This seems to help a little. But not THAT much, so tone down
         "sched_warmup_epochs": 50*20,
         "sched_finish": True,
         "resample_factor": 0.01,
         "log_everything": False,
-        "anthropic_resample_last": 7_500, # Really timesed by cfg["batch_size"]...
-        "l1_loss_form": "l1", # or "hoyer"
-        "l2_loss_form": "l2", # or "centred cosine sim"
+        "anthropic_resample_last": 7_500,
+        "l1_loss_form": "l1",
+        "l2_loss_form": "l2",
     }
 
     for k, v in kwargs.items():

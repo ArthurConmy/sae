@@ -76,15 +76,12 @@ if cfg["testing"]:
     assert cfg["activation_training_order"] == "shuffled", cfg["activation_training_order"]
     cfg["buffer_size"] = 2**17
 
-if (cfg["activation_training_order"] == "ordered") != (cfg["buffer_size"] is None):
-    raise ValueError(f'We train activations shuffled iff we have a buffer')
-
 sae_batch_size = cfg["batch_size"] * cfg["seq_len"]
 
 if cfg["buffer_size"] is not None:
     assert sae_batch_size <= cfg["buffer_size"], f"SAE batch size {sae_batch_size} is larger than buffer size {cfg['buffer_size']}"
 
-if (cfg["resample_mode"] == "anthropic") != (cfg["anthropic_resample_batches"] is not None):
+if (cfg["resample_mode"] == "anthropic") != (cfg["anthropic_resample_batches"] > 0):
     raise ValueError(f'We resample anthropically iff we have anthropic_resample_batches')
 
 if cfg["resample_mode"] == "anthropic":

@@ -37,6 +37,7 @@ if __name__ == '__main__':
             "l1_lambda": l1_lambda,
             # non-Anthropic resampling
             "resample_mode": "reinit",
+            "anthropic_resample_batches": 0, # needed for some dumb config
         })
         keyword_list.append({
             "d_sae": 131072,
