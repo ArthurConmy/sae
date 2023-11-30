@@ -45,7 +45,6 @@ if __name__ == '__main__':
             "activation_training_order": "ordered",
         })
 
-
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
     keyword_list[-1]["delete_cache"]=True
 

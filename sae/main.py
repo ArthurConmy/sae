@@ -247,6 +247,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 # Truncate unused space in new_buffer
                 buffer = new_buffer[:insert_idx]
 
+                assert cfg["activation_training_order"] == "shuffled"
                 # Shuffle buffer
                 buffer = buffer[torch.randperm(buffer.shape[0])]
                 print("... done.")
@@ -331,10 +332,10 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             # Now compute dead neurons
             current_frequency_counter = running_frequency_counter.to(cfg["dtype"]) / (sae_batch_size * (step_idx - last_test_every)) # TODO implement exactly the Anthropic thing
 
-            if cfg["resample_mode"] == "anthropic":
+            if cfg["resample_condition"] == "nofire":
                 # Get things that didn't fire
                 indices = (running_frequency_counter == 0).nonzero(as_tuple=False)[:, 0]
-            elif cfg["resample_mode"] == "reinit":        
+            elif cfg["resample_condition"] == "freq":        
                 # Get indices of neurons with frequency < reset_cutoff
                 indices = (current_frequency_counter < cfg["resample_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
             else:
