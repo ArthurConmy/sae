@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 from random import randint
 from jaxtyping import Float, Int, Bool
+import warnings
 from datasets import load_dataset
 from transformer_lens import utils
 import subprocess
@@ -94,9 +95,12 @@ assert cfg["sched_type"].lower() in ["none", "cosine_warmup"], f"Unknown sched_t
 def resample_at_step_idx(step_idx) -> bool:
     return step_idx in cfg["resample_sae_neurons_at"] or (cfg["resample_sae_neurons_every"] is not None and step_idx % cfg["resample_sae_neurons_every"] == 0)
 
-lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l").to(cfg["dtype"])
-lm.tokenizer = AutoTokenizer.from_pretrained("ArthurConmy/alternative-neel-tokenizer")
-assert lm.cfg.d_mlp == cfg["d_in"], f"lm.cfg.d_mlp {lm.cfg.d_mlp} != cfg['d_in'] {cfg['d_in']}"
+lm = transformer_lens.HookedTransformer.from_pretrained("gpt2").to(cfg["dtype"])
+
+if cfg["act_name"].endswith("mlp_post"):
+    assert lm.cfg.d_mlp == cfg["d_in"], f"lm.cfg.d_mlp {lm.cfg.d_mlp} != cfg['d_in'] {cfg['d_in']}"
+else:
+    warnings.warn("Lol no size checkin")
 
 # %%
 

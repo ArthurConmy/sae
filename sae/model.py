@@ -223,8 +223,6 @@ class SAE(HookedRootModule):
             .to(self.device)
         )
 
-        # Set biases to zero
-        self.b_enc.data[indices] = 0.0
 
         # Set W_enc equal to W_dec.T in these indices, first
         self.W_enc.data[:, indices] = self.W_dec.data[indices, :].T
@@ -237,8 +235,14 @@ class SAE(HookedRootModule):
             metrics["resample_norm_thats_hopefully_less_or_around_one"] = average_norm.item()
             self.W_enc.data[:, indices] *= self.cfg["resample_factor"] * average_norm
 
+            # Set biases to resampledvalue
+            relevant_biases = self.b_enc.data[indices].mean()
+            self.b_enc.data[indices] = relevant_biases * self.cfg["bias_resample_factor"]
+
         else:
             self.W_enc.data[:, indices] *= self.cfg["resample_factor"]
+    
+            self.b_enc.data[indices] = - 5.0
 
     @torch.no_grad()
     def resample_neurons(

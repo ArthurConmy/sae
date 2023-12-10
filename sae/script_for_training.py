@@ -20,30 +20,14 @@ if __name__ == '__main__':
     jobs = []
     keyword_list = []
     
-    num_gpus = 8 # Number of GPUs available
+    num_gpus = 2 # Number of GPUs available
     num_jobs_per_gpu = 1  # Number of jobs per GPU
 
     for width in [131072, 65536]:
         keyword_list.append({
             "d_sae": width,
             "lr": 0.0012,
-            "l1_lambda": 16 / 10_000,
-        })
-
-    for l1_lambda in [0.0008, 0.0012, 0.0016]:
-        keyword_list.append({
-            "d_sae": 131072,
-            "lr": 0.0012,
-            "l1_lambda": l1_lambda,
-            # non-Anthropic resampling
-            "resample_mode": "reinit",
-            "anthropic_resample_batches": 0, # needed for some dumb config
-        })
-        keyword_list.append({
-            "d_sae": 131072,
-            "lr": 0.0012,
-            "l1_lambda": l1_lambda,
-            "activation_training_order": "ordered",
+            "l1_lambda": 12 / 10_000,
         })
 
     pool = multiprocessing.Pool(num_gpus * num_jobs_per_gpu)
