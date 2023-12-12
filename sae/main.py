@@ -205,13 +205,16 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 )
 
         # Then handle getting activations (possibly moving to correct device)
-        if cfg["activation_training_order"] == "ordered" or step_idx == 0:
+        if cfg["activation_training_order"] == "ordered":
             mlp_post_acts = get_activations(
                 lm=lm,
                 cfg=cfg,
                 batch_tokens=batch_tokens,
                 act_name=cfg["act_name"],
             )
+
+        elif step_idx == 0:
+            pass
 
         else:
             if refill_buffer:
@@ -262,7 +265,6 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
         if step_idx == 0:
             test_tokens = batch_tokens
-            test_set = mlp_post_acts
 
             # Find the loss normally, and when zero ablating activation
             for factor in [1.0, 0.0]:
@@ -272,7 +274,8 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             continue
 
-        metrics = train_step(sae=sae, opt=opt, sched=sched, step_idx=step_idx, cfg=cfg, mini_batch=mlp_post_acts, test_data=(test_set if step_idx%cfg["test_every"]==0 else None))
+        metrics = train_step(sae=sae, opt=opt, sched=sched, step_idx=step_idx, cfg=cfg, mini_batch=mlp_post_acts, test_data=None)
+        # We're not looking at other test metrics anymore
         running_frequency_counter += metrics["did_fire_logged"]
 
         if step_idx%cfg["test_every"]==0:
@@ -281,7 +284,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             torch.cuda.empty_cache()
 
             # Figure out the loss on the test prompts
-            metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens).item()
+            metrics["test_loss_with_sae"] = sae.get_test_loss(lm=lm, test_tokens=test_tokens, cfg=cfg).item()
             metrics["loss_recovered"] = (prelosses[1]-metrics["test_loss_with_sae"])/(prelosses[1]-prelosses[0])
 
             gc.collect()
