@@ -183,7 +183,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 lm=lm,
                 dataset=raw_all_data,
                 seq_len=cfg["seq_len"],
-                batch_size=cfg["batch_size"] if step_idx > 0 else cfg["test_set_batch_size"],
+                batch_size=cfg["batch_size"] if step_idx > 0 else cfg["test_set_batch_size"]*cfg["test_set_num_batches"],
             )
 
             refill_buffer = False
@@ -266,15 +266,9 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
 
             # Find the loss normally, and when zero ablating activation
             for factor in [1.0, 0.0]:
-                logits = lm.run_with_hooks(
-                    test_tokens,
-                    fwd_hooks=[(cfg["act_name"], lambda activation, hook: factor*activation)],
-                )
-                logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-                correct_logprobs = logprobs[torch.arange(logprobs.shape[0])[:, None], torch.arange(logprobs.shape[1]-1)[None], test_tokens[:, 1:]]
-                loss = -correct_logprobs.mean()
-                wandb.log({"prelosses": loss.item()})
-                prelosses.append(loss.item())
+                neglogprobs = sae.get_test_loss(lm=lm, test_tokens=test_tokens, cfg=cfg, hook = lambda activation, hook: factor*activation)
+                wandb.log({"prelosses": neglogprobs.item()})
+                prelosses.append(neglogprobs.item())
 
             continue
 
@@ -338,7 +332,7 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
                 indices = (running_frequency_counter == 0).nonzero(as_tuple=False)[:, 0]
             elif cfg["resample_condition"] == "freq":        
                 # Get indices of neurons with frequency < reset_cutoff
-                indices = (current_frequency_counter < cfg["resample_sae_neurons_cutoff"]).nonzero(as_tuple=False)[:, 0]
+                indices = (current_frequency_counter < cfg["resample_sae_neurons_cutoff"](step_idx)).nonzero(as_tuple=False)[:, 0]
             else:
                 raise ValueError(f"Unknown resample_mode {cfg['resample_mode']}")
 

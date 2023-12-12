@@ -1,11 +1,12 @@
-Coding up an SAE for a 1L model.
+Coding up an SAE.
+Best 1L Results: 64k and 131k Dict Features at 84% Loss Recovered, 9 L0. And 88% Loss Recoverd 22 L0
 
-<h2> Next steps: </h2>
-<b> Get comparable performance to Anthropic </b>
+TODO bfloat16 issues??? The (two?) autocast bfloat16s dont matter, stuff is same to 1e-3
 
-Currently we have a good sweep of stuff, remember that Neel got low 100s L0. We also have Anthropic A/1 replication on the way, too.
-
-Best: 64k and 131k Dict Features at 84% Loss Recovered, 9 L0. And 88% Loss Recoverd 22 L0
+GPT-2 Small ideas
+* Only 1e-6 for first two resamples.
+* Adam beta2???
+* Buffer size
 
 # TODO: 
 
@@ -14,8 +15,6 @@ Other ideas:
 * Geometric median crap?
 
 * Untie the bias in and bias out?
-
-* Do this all on MLP out not hidden???
 
 * Should we really be doing bias initialized to 0 in reinits? Seems like it makes a lot of non-zero fires, eek
 

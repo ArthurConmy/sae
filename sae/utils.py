@@ -36,6 +36,7 @@ def hoyer_square(z: torch.Tensor, dim: int = -1) -> torch.Tensor:
     denom = z.norm(p=2, dim=dim)
     return numer.div(denom + eps).square()
 
+@torch.autocast("cuda", torch.bfloat16)
 def loss_fn(
     sae_reconstruction,
     sae_hiddens,
@@ -190,8 +191,8 @@ def get_batch_tokens(
     
     return batch_tokens[:batch_size]
 
-@torch.autocast("cuda", torch.bfloat16)
 @torch.no_grad()
+@torch.autocast("cuda", torch.bfloat16)
 def get_activations(
     lm,
     batch_tokens, 
@@ -235,8 +236,8 @@ def get_neel_model(version = 1):
 def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
     cur_dict = {
         "seed": 1, 
-        "batch_size": 32,  # Number of samples we pass through THE LM 
-        "seq_len": 128,  # Length of each input sequence for the model
+        "batch_size": 4,  # Number of samples we pass through THE LM 
+        "seq_len": 1024,  # Length of each input sequence for the model
         "d_in": 768,  # Input dimension for the encoder model
         "d_sae": 16384 * 8,  # Dimensionality for the sparse autoencoder (SAE)
         "lr": 0.0012,  # This is low because Neel uses L2, and I think we should use mean squared error
@@ -246,21 +247,22 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "dataset_kwargs": {"split": "train", "streaming": True}, 
         # Keyword arguments for dataset. Highly recommend streaming for massive datasets!
         "beta1": 0.9,  # Adam beta1
-        "beta2": 0.99,  # Adam beta2
+        "beta2": 0.999,  # Adam beta2
         "act_name": "blocks.8.hook_mlp_out",
         "num_tokens": int(2e12), # Number of tokens to train on 
-        "test_set_batch_size": 100, # 20 Sequences
+        "test_set_batch_size": 1,
+        "test_set_num_batches": 300,
         "wandb_mode_online_override": False, # Even if in testing, wandb online anyways
-        "test_every": 100,
+        "test_every": 500,
         "save_state_dict_every": lambda step: step%19000 == 1, # Disabled currently; used Mod 1 so this still saves immediately. Plus doesn't interfere with resampling (very often)
         "wandb_group": None,
         "resample_condition": "freq", # Choose nofire or freq
-        "resample_sae_neurons_cutoff": 1e-7, # Maybe resample fewer later... only used if resample_condition == "nofire"
+        "resample_sae_neurons_cutoff": lambda step: (1e-6 if step < 25_000 else 1e-7), # Maybe resample fewer later... only used if resample_condition == "nofire"
         "resample_mode": "anthropic", # Either "reinit" or "Anthropic"
         "anthropic_resample_batches": 200_000, # 32_000 // 100, # How many batches to go through when doing Anthropic reinit. Should be >=d_sae so there are always enough. Plus 
         "resample_sae_neurons_every": 205042759847598434752987523487239,
         "resample_sae_neurons_at": [10_000, 20_000] + torch.arange(50_000, 125_000, 25_000).tolist(),
-        "dtype": torch.bfloat16, 
+        "dtype": torch.float32, 
         "device": torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         "activation_training_order": "shuffled", # Do we shuffle all MLP activations across all batch and sequence elements (Neel uses a buffer for this), using `"shuffled"`? Or do we order them (`"ordered"`)
         "buffer_size": 2**19, # Size of the buffer
@@ -272,8 +274,8 @@ def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
         "sched_lr_factor": 0.1, # This seems to help a little. But not THAT much, so tone down
         "sched_warmup_epochs": 50*20,
         "sched_finish": True,
-        "resample_factor": 0.1, # 3.4 steps per second
-        "bias_resample_factor": 0.5,
+        "resample_factor": 0.2, # 3.4 steps per second
+        "bias_resample_factor": 0.0,
         "log_everything": False,
         "anthropic_resample_last": 7500,
         "l1_loss_form": "l1",

@@ -97,14 +97,17 @@ class SAE(HookedRootModule):
             raise ValueError(f"Unexpected {return_mode=}")
 
     @torch.no_grad()
-    def get_test_loss(self, lm, test_tokens, return_mode: Literal["mean", "all"]="mean"):
-        with torch.autocast("cuda", torch.bfloat16):
+    def get_test_loss(self, lm, test_tokens, cfg, hook=None, return_mode: Literal["mean", "all"]="mean"):
+        # with torch.autocast("cuda", torch.bfloat16):
+        
+        all_correct_logprobs = None
+        for start_index in range(0, test_tokens.shape[0], cfg["test_set_batch_size"]):
             logits = lm.run_with_hooks(
-                test_tokens,
+                test_tokens[start_index : start_index + cfg["test_set_batch_size"]],
                 fwd_hooks=[
                     (
                         self.cfg["act_name"],
-                        lambda activation, hook: self.forward(activation, return_mode="sae_out"),
+                        hook or (lambda activation, hook: self.forward(activation, return_mode="sae_out")),
                     )
                 ],
             )
@@ -112,14 +115,21 @@ class SAE(HookedRootModule):
             correct_logprobs = logprobs[
                 torch.arange(logprobs.shape[0])[:, None],
                 torch.arange(logprobs.shape[1] - 1)[None],
-                test_tokens[:, 1:],
+                test_tokens[start_index : start_index + cfg["test_set_batch_size"]][:, 1:],
             ]
-            if return_mode == "mean":
-                return -correct_logprobs.mean()
-            elif return_mode == "all":
-                return -correct_logprobs
+            if all_correct_logprobs is None:
+                all_correct_logprobs = correct_logprobs.cpu()
             else:
-                raise ValueError(f"Unexpected {return_mode=}")
+                all_correct_logprobs = torch.cat(
+                    [all_correct_logprobs, correct_logprobs.cpu()], dim=0
+                )
+
+        if return_mode == "mean":
+            return -all_correct_logprobs.mean()
+        elif return_mode == "all":
+            return -all_correct_logprobs
+        else:
+            raise ValueError(f"Unexpected {return_mode=}")
 
     def reinit_neurons(
         self,
