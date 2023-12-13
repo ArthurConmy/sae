@@ -188,6 +188,7 @@ class SAE(HookedRootModule):
                 lm=lm,
                 test_tokens=refill_batch_tokens,
                 return_mode="all",
+                cfg=self.cfg,
             )
 
             cache=[]
@@ -203,6 +204,7 @@ class SAE(HookedRootModule):
             )
             normal_activations = normal_activations_cache[self.cfg["act_name"]]
 
+            normal_loss = normal_loss.cpu()
             changes_in_loss = sae_loss - normal_loss
             changes_in_loss_dist = Categorical(
                 torch.nn.functional.relu(changes_in_loss) / torch.nn.functional.relu(changes_in_loss).sum(dim=1, keepdim=True)
