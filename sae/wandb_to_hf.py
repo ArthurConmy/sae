@@ -74,7 +74,7 @@ pt_path = curpath.parent.parent.parent / "sae-replication" / (f"{run_name}.pt")
 import huggingface_hub
 my_file = huggingface_hub.hf_hub_download("ArthurConmy/sae-replication", f"{run_name}.pt")
 with open(my_file, "rb") as f:
-    state_dict = torch.load(f)
+    state_dict = torch.load(f, weights_only=True)
 my_sae.load_state_dict(state_dict)
 
 #%%
