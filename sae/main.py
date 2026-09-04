@@ -28,7 +28,8 @@ from jaxtyping import Float, Int, Bool
 import warnings
 from datasets import load_dataset
 from transformer_lens import utils
-import subprocess
+import glob
+import shutil
 import ast
 import time
 from IPython.display import display, HTML
@@ -297,9 +298,21 @@ if True: # Usually we don't want to profile, so `if True` is better as it keeps 
             if cfg["delete_cache"]:
                 try:
                     # These seem to be working badly; use https://docs.wandb.ai/ref/cli/wandb-artifact/wandb-artifact-cache/wandb-artifact-cache-cleanup ???
-                    subprocess.run("rm -rf /root/.cache/wandb/artifacts/**", shell=True) # Using delete_cache=True for just one process fixes this right?
-                    subprocess.run("rm -rf /workspace/sae/weights/**.pt", shell=True)
-                    subprocess.run("rm -rf /root/.local/share/wandb/artifacts/staging/**", shell=True)
+                    # Delete via Python filesystem calls rather than `rm -rf ... **` through a shell
+                    # (/bin/sh has no globstar, so `**` there meant `*`; these globs match the same paths).
+                    for pattern in [
+                        "/root/.cache/wandb/artifacts/*", # Using delete_cache=True for just one process fixes this right?
+                        "/workspace/sae/weights/*.pt",
+                        "/root/.local/share/wandb/artifacts/staging/*",
+                    ]:
+                        for path in glob.glob(pattern):
+                            try:
+                                if os.path.isdir(path) and not os.path.islink(path):
+                                    shutil.rmtree(path)
+                                else:
+                                    os.remove(path)
+                            except OSError as e:
+                                print("Couldn't delete " + path + ": " + str(e))
                 except Exception as e:
                     print("Couldn't cache clear: " + str(e))
 

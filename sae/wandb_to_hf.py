@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import wandb
 import torch
-from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, get_neel_model, get_cfg
+from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, get_neel_model, get_cfg, parse_dtype
 
 
 # Initialize the wandb API
@@ -42,7 +42,7 @@ first_run = filtered_runs[0]
 
 cfg = first_run.config # Yeeeeah
 if isinstance(cfg["dtype"], str):
-    cfg["dtype"] = eval(cfg["dtype"])
+    cfg["dtype"] = parse_dtype(cfg["dtype"])
 
 import torch
 lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l") 
@@ -61,7 +61,7 @@ run_name = "2rqzhpl3"
 import transformer_lens.utils as tl_utils
 cfg = tl_utils.download_file_from_hf("ArthurConmy/sae-replication", f"{run_name}.json")
 
-my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": eval(cfg["dtype"]), "device": "cuda:0"})
+my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": parse_dtype(cfg["dtype"]), "device": "cuda:0"})
 # "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"], dtype = 
 
 #%%
@@ -74,7 +74,7 @@ pt_path = curpath.parent.parent.parent / "sae-replication" / (f"{run_name}.pt")
 import huggingface_hub
 my_file = huggingface_hub.hf_hub_download("ArthurConmy/sae-replication", f"{run_name}.pt")
 with open(my_file, "rb") as f:
-    state_dict = torch.load(f)
+    state_dict = torch.load(f, weights_only=True)
 my_sae.load_state_dict(state_dict)
 
 #%%
@@ -83,8 +83,9 @@ my_sae.to("cuda:0")
 
 #%%
 
+import ast
 from datasets import load_dataset
-ds = iter(load_dataset(cfg["dataset"], *(eval(cfg["dataset_args"]) or []), **(eval(cfg["dataset_kwargs"]) or {})))
+ds = iter(load_dataset(cfg["dataset"], *(ast.literal_eval(cfg["dataset_args"]) or []), **(ast.literal_eval(cfg["dataset_kwargs"]) or {})))
 
 #%%
 

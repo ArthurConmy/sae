@@ -8,7 +8,7 @@ packages = [{include = "sae"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13" # For dependency crap ... ideally support Python 3.8
-torch = "^1.13.1, <3.0"
+torch = ">=2.6, <3.0"
 ruff = "^0.1.3"
 einops = "^0.7.0"
 transformer-lens = "^1.10.0"
@@ -21,6 +21,7 @@ ipython = "^8.14.0"
 datasets = "^2.14.6"
 ipywidgets = "^8.1.1"
 jupyter = "^1.0.0"
+pyarrow = ">=14.0.1, <15" # Transitive via datasets; 14.0.0 has an IPC deserialization RCE (CVE-2023-47248)
 
 [build-system]
 requires = ["poetry-core"]

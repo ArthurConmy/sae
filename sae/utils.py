@@ -27,6 +27,7 @@ from pathlib import Path
 from pprint import pprint
 from torch.utils.data import Dataset
 from transformer_lens import utils
+from huggingface_hub import hf_hub_download
 
 def hoyer_square(z: torch.Tensor, dim: int = -1) -> torch.Tensor:
     """Hoyer-Square sparsity measure."""
@@ -230,8 +231,24 @@ def get_neel_model(version = 1):
     cfg = utils.download_file_from_hf("NeelNanda/sparse_autoencoder", f"{version}_cfg.json")
     pprint("Loading this checkpoint:")
     pprint(str(cfg))
-    state_dict = utils.download_file_from_hf("NeelNanda/sparse_autoencoder", f"{version}.pt", force_is_torch=True)
+    # Download the checkpoint ourselves so it can be loaded with weights_only=True;
+    # transformer_lens.utils.download_file_from_hf(force_is_torch=True) uses an
+    # unrestricted torch.load, which unpickles arbitrary code from the file.
+    state_dict_path = hf_hub_download("NeelNanda/sparse_autoencoder", f"{version}.pt")
+    state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
     return cfg, state_dict
+
+def parse_dtype(dtype: Union[str, torch.dtype]) -> torch.dtype:
+    """Turn a serialized dtype such as "torch.float32" back into torch.float32 without eval."""
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    name = str(dtype)
+    if name.startswith("torch."):
+        name = name[len("torch."):]
+    resolved = getattr(torch, name, None)
+    if not isinstance(resolved, torch.dtype):
+        raise ValueError(f"Not a torch dtype: {dtype!r}")
+    return resolved
 
 def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
     cur_dict = {
