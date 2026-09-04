@@ -12,4 +12,4 @@ A quick SAE implementation
 
 # Help
 
-`pip install -e .` is optimal for now. Maybe use `pip install -U torch==1.13.1` for crap hardware
+`pip install -e .` is optimal for now. torch >= 2.6 is required: older releases can run arbitrary code from `torch.load` (CVE-2025-32434), which this repo relies on to load checkpoints from wandb and the Hugging Face hub safely.
