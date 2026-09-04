@@ -238,6 +238,18 @@ def get_neel_model(version = 1):
     state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
     return cfg, state_dict
 
+def parse_dtype(dtype: Union[str, torch.dtype]) -> torch.dtype:
+    """Turn a serialized dtype such as "torch.float32" back into torch.float32 without eval."""
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    name = str(dtype)
+    if name.startswith("torch."):
+        name = name[len("torch."):]
+    resolved = getattr(torch, name, None)
+    if not isinstance(resolved, torch.dtype):
+        raise ValueError(f"Not a torch dtype: {dtype!r}")
+    return resolved
+
 def get_cfg(**kwargs) -> Dict[str, Any]: # TODO remove Any
     cur_dict = {
         "seed": 1, 

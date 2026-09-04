@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import wandb
 import torch
-from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, get_neel_model, get_cfg
+from sae.utils import loss_fn, train_step, get_batch_tokens, get_activations, get_neel_model, get_cfg, parse_dtype
 
 
 # Initialize the wandb API
@@ -42,7 +42,7 @@ first_run = filtered_runs[0]
 
 cfg = first_run.config # Yeeeeah
 if isinstance(cfg["dtype"], str):
-    cfg["dtype"] = eval(cfg["dtype"])
+    cfg["dtype"] = parse_dtype(cfg["dtype"])
 
 import torch
 lm = transformer_lens.HookedTransformer.from_pretrained("gelu-1l") 
@@ -61,7 +61,7 @@ run_name = "2rqzhpl3"
 import transformer_lens.utils as tl_utils
 cfg = tl_utils.download_file_from_hf("ArthurConmy/sae-replication", f"{run_name}.json")
 
-my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": eval(cfg["dtype"]), "device": "cuda:0"})
+my_sae = SAE(cfg = {**cfg, "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"]), "dtype": parse_dtype(cfg["dtype"]), "device": "cuda:0"})
 # "d_sae": int(cfg["d_sae"]), "d_in": int(cfg["d_in"], dtype = 
 
 #%%
