@@ -83,8 +83,9 @@ my_sae.to("cuda:0")
 
 #%%
 
+import ast
 from datasets import load_dataset
-ds = iter(load_dataset(cfg["dataset"], *(eval(cfg["dataset_args"]) or []), **(eval(cfg["dataset_kwargs"]) or {})))
+ds = iter(load_dataset(cfg["dataset"], *(ast.literal_eval(cfg["dataset_args"]) or []), **(ast.literal_eval(cfg["dataset_kwargs"]) or {})))
 
 #%%
 
