@@ -2,7 +2,7 @@
 
 import os 
 os.environ["TOKENIZERS_PARALLELISM"] = "false" # Ignores a warning, unsure if this option is right
-os.environ["TRANSFORMERS_CACHE"] = "/workspace/cache" # Cache transformers
+os.environ["HF_HUB_CACHE"] = "/workspace/cache" # Cache transformers (TRANSFORMERS_CACHE is ignored by transformers >= 5)
 
 from IPython import get_ipython
 ipython = get_ipython()
